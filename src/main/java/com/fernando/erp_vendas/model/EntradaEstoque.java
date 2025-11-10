@@ -8,7 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "entrada_estoque")
+@Table(name = "entrada_estoque", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"id_pedido_compra", "user_id"})
+})
 public class EntradaEstoque {
 
     @Id

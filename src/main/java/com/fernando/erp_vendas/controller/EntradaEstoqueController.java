@@ -41,7 +41,7 @@ public class EntradaEstoqueController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
-    // ✅ ATUALIZADO: Registrar nova entrada de estoque (COMPRA) PARA O USUÁRIO
+    // ✅ CORRIGIDO: Registrar nova entrada de estoque (COMPRA) PARA O USUÁRIO
     @PostMapping("/entrada")
     public ResponseEntity<?> registrarEntrada(
             @RequestParam Long produtoId,
@@ -73,17 +73,36 @@ public class EntradaEstoqueController {
                         .body("Já existe uma compra cadastrada com este ID do Pedido: " + idPedidoCompra);
             }
 
-            // Cria e salva a nova entrada de estoque com todos os campos
+            // ✅ CORREÇÃO CRÍTICA: Cria entrada com cálculo automático de custo unitário e saldo
             EntradaEstoque entrada = new EntradaEstoque(
                     produto,
                     quantidade,
                     custoTotal,
                     fornecedor != null ? fornecedor : "",
-                    idPedidoCompra,
+                    idPedidoCompra, // ✅ ID ORIGINAL DO USUÁRIO (sem modificação)
                     categoria,
                     observacoes != null ? observacoes : "",
-                    currentUser // 🆕 ASSOCIAR USUÁRIO
+                    currentUser
             );
+
+            // ✅ CORREÇÃO: CALCULAR CUSTO UNITÁRIO AUTOMATICAMENTE
+            if (quantidade != null && quantidade > 0) {
+                try {
+                    BigDecimal custoUnitario = custoTotal.divide(
+                            BigDecimal.valueOf(quantidade),
+                            2,
+                            java.math.RoundingMode.HALF_UP
+                    );
+                    entrada.setCustoUnitario(custoUnitario);
+                } catch (ArithmeticException e) {
+                    double custoUnitarioDouble = custoTotal.doubleValue() / quantidade;
+                    entrada.setCustoUnitario(BigDecimal.valueOf(custoUnitarioDouble)
+                            .setScale(2, java.math.RoundingMode.HALF_UP));
+                }
+            }
+
+            // ✅ CORREÇÃO: DEFINIR SALDO INICIAL
+            entrada.setSaldo(quantidade);
 
             EntradaEstoque entradaSalva = entradaEstoqueRepository.save(entrada);
 
@@ -188,6 +207,52 @@ public class EntradaEstoqueController {
                     .body("Erro de integridade de dados: " + e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao atualizar compra: " + e.getMessage());
+        }
+    }
+
+    // 🆕 MÉTODO TEMPORÁRIO: LIMPAR DADOS INCONSISTENTES (executar UMA vez via POSTMAN)
+    @PostMapping("/limpar-dados-inconsistentes")
+    public ResponseEntity<?> limparDadosInconsistentes() {
+        try {
+            User currentUser = getCurrentUser();
+
+            // 1. Buscar todas as entradas do sistema (apenas para análise)
+            List<EntradaEstoque> todasEntradas = entradaEstoqueRepository.findAll();
+
+            // 2. Encontrar entradas sem usuário (dados antigos)
+            List<EntradaEstoque> entradasSemUsuario = todasEntradas.stream()
+                    .filter(e -> e.getUser() == null)
+                    .collect(Collectors.toList());
+
+            // 3. Encontrar entradas de outros usuários que podem causar conflito
+            List<EntradaEstoque> entradasOutrosUsuarios = todasEntradas.stream()
+                    .filter(e -> e.getUser() != null && !e.getUser().getId().equals(currentUser.getId()))
+                    .collect(Collectors.toList());
+
+            // 4. Deletar apenas entradas SEM usuário E SEM vendas associadas
+            int entradasDeletadas = 0;
+            for (EntradaEstoque entrada : entradasSemUsuario) {
+                if (entrada.getItensVenda() == null || entrada.getItensVenda().isEmpty()) {
+                    entradaEstoqueRepository.delete(entrada);
+                    entradasDeletadas++;
+                }
+            }
+
+            return ResponseEntity.ok(String.format(
+                    "🔧 LIMPEZA DE DADOS CONCLUÍDA:\n" +
+                            "• Total de entradas no sistema: %d\n" +
+                            "• Entradas sem usuário: %d\n" +
+                            "• Entradas de outros usuários: %d\n" +
+                            "• Entradas deletadas (sem usuário e sem vendas): %d\n\n" +
+                            "💡 DICA: Entradas de outros usuários NÃO são deletadas para manter a integridade multi-tenant.",
+                    todasEntradas.size(),
+                    entradasSemUsuario.size(),
+                    entradasOutrosUsuarios.size(),
+                    entradasDeletadas
+            ));
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("❌ Erro na limpeza: " + e.getMessage());
         }
     }
 

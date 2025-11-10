@@ -19,6 +19,10 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     // Buscar TODAS as vendas do usuário
     List<Venda> findByUser(User user);
 
+    // ✅ NOVO MÉTODO: Buscar vendas com produto carregado (resolve LazyInitialization)
+    @Query("SELECT v FROM Venda v JOIN FETCH v.produto WHERE v.user = :user")
+    List<Venda> findByUserWithProduto(@Param("user") User user);
+
     // Buscar vendas pela plataforma DO USUÁRIO
     List<Venda> findByPlataformaAndUser(String plataforma, User user);
 

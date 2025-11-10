@@ -48,7 +48,7 @@ public class VendaController {
 
     // ✅ ATUALIZADO: Método para calcular faturamento por plataforma DO USUÁRIO
     private Map<String, Double> calcularFaturamentoPorPlataforma(User user) {
-        List<Venda> vendasUsuario = vendaRepository.findByUser(user);
+        List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(user);
         Map<String, Double> faturamentoPorPlataforma = new HashMap<>();
 
         // Inicializar todas as plataformas
@@ -70,7 +70,7 @@ public class VendaController {
 
     // ✅ ATUALIZADO: Método para produtos mais vendidos com faturamento DO USUÁRIO
     private List<Map<String, Object>> calcularProdutosMaisVendidos(User user) {
-        List<Venda> vendasUsuario = vendaRepository.findByUser(user);
+        List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(user);
         Map<String, Map<String, Object>> produtosMap = new HashMap<>();
 
         // Agrupar por produto
@@ -116,7 +116,7 @@ public class VendaController {
             Map<String, Object> dashboard = new HashMap<>();
 
             // Buscar todas as vendas DO USUÁRIO para calcular em tempo real
-            List<Venda> vendasUsuario = vendaRepository.findByUser(currentUser);
+            List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(currentUser);
 
             // ✅ CALCULAR TOTAIS USANDOS OS NOVOS MÉTODOS
             double faturamentoTotal = 0;
@@ -193,15 +193,31 @@ public class VendaController {
     public ResponseEntity<?> listarTodas() {
         try {
             User currentUser = getCurrentUser();
-            List<Venda> vendas = vendaRepository.findByUser(currentUser);
+            System.out.println("🔍 DEBUG VENDAS - Buscando vendas para usuário: " + currentUser.getEmail());
+
+            // ✅ CORREÇÃO: Usar método com JOIN FETCH para evitar LazyInitialization
+            List<Venda> vendas = vendaRepository.findByUserWithProduto(currentUser);
+            System.out.println("📊 DEBUG VENDAS - Total de vendas encontradas: " + vendas.size());
+
+            // ✅ DEBUG: Verificar cada venda
+            for (int i = 0; i < vendas.size(); i++) {
+                Venda venda = vendas.get(i);
+                System.out.println("   Venda " + i + ": ID=" + venda.getId() +
+                        ", Pedido=" + venda.getIdPedido() +
+                        ", Produto=" + (venda.getProduto() != null ? venda.getProduto().getNome() : "NULL") +
+                        ", Data=" + venda.getData());
+            }
 
             // ✅ CONVERTER PARA DTO
             List<VendaDTO> vendasDTO = vendas.stream()
                     .map(VendaDTO::new)
                     .collect(Collectors.toList());
 
+            System.out.println("✅ Vendas convertidas para DTO: " + vendasDTO.size());
             return ResponseEntity.ok(vendasDTO);
         } catch (Exception e) {
+            System.out.println("❌ ERRO CRÍTICO em listarTodas: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao listar vendas: " + e.getMessage());
         }
     }
@@ -219,41 +235,118 @@ public class VendaController {
         }
     }
 
-    // ✅ CORRIGIDO: POST - Criar nova venda PARA O USUÁRIO
+    // ✅ CORREÇÃO CRÍTICA: POST - Criar nova venda PARA O USUÁRIO (COM DEBUG COMPLETO)
     @PostMapping
-    public ResponseEntity<?> criarVenda(@RequestBody Venda venda) {
+    public ResponseEntity<?> criarVenda(@RequestBody Map<String, Object> vendaData) {
         try {
+            System.out.println("🔍 DEBUG INICIAL - Dados recebidos: " + vendaData);
+
             User currentUser = getCurrentUser();
 
-            // 1. Verificar se o produto existe E PERTENCE AO USUÁRIO
-            Optional<Produto> produto = produtoRepository.findByIdAndUser(
-                    venda.getProduto().getId(), currentUser);
-            if (!produto.isPresent()) {
-                return ResponseEntity.badRequest().body("Produto não encontrado ou não pertence ao usuário");
+            // 1. DEBUG: Mostrar TODOS os campos do Map
+            System.out.println("📋 DEBUG MAP COMPLETO:");
+            for (Map.Entry<String, Object> entry : vendaData.entrySet()) {
+                System.out.println("   " + entry.getKey() + " = " + entry.getValue() + " (tipo: " +
+                        (entry.getValue() != null ? entry.getValue().getClass().getSimpleName() : "null") + ")");
             }
 
-            // 2. Verificar se já existe venda com mesmo ID do pedido PARA ESTE USUÁRIO
-            if (vendaRepository.findByIdPedidoAndUser(venda.getIdPedido(), currentUser).isPresent()) {
+            // 2. Extrair dados do Map (INCLUINDO AGORA A DATA)
+            Long produtoId = Long.valueOf(vendaData.get("produtoId").toString());
+            Integer quantidade = Integer.valueOf(vendaData.get("quantidade").toString());
+            String idPedido = vendaData.get("idPedido").toString();
+            String plataforma = vendaData.get("plataforma").toString();
+            Double precoVenda = Double.valueOf(vendaData.get("precoVenda").toString());
+
+            // ✅ CORREÇÃO CRÍTICA: Extrair e converter a data COM DEBUG
+            String dataString = vendaData.get("data") != null ?
+                    vendaData.get("data").toString() : null;
+
+            System.out.println("📅 DEBUG DATA - String recebida: '" + dataString + "'");
+
+            LocalDateTime dataVenda;
+            if (dataString != null && !dataString.trim().isEmpty()) {
+                try {
+                    // Tentar parse direto (formato completo)
+                    dataVenda = LocalDateTime.parse(dataString);
+                    System.out.println("✅ DEBUG DATA - Parse direto bem-sucedido: " + dataVenda);
+                } catch (Exception e1) {
+                    try {
+                        // Tentar parse com formato simplificado (sem segundos)
+                        dataVenda = LocalDateTime.parse(dataString + ":00");
+                        System.out.println("✅ DEBUG DATA - Parse com segundos bem-sucedido: " + dataVenda);
+                    } catch (Exception e2) {
+                        System.out.println("❌ DEBUG DATA - Erro no parse, usando data atual");
+                        dataVenda = LocalDateTime.now();
+                    }
+                }
+            } else {
+                System.out.println("⚠️ DEBUG DATA - String vazia, usando data atual");
+                dataVenda = LocalDateTime.now();
+            }
+
+            System.out.println("🎯 DEBUG DATA FINAL - Data que será salva: " + dataVenda);
+
+            Double fretePagoPeloCliente = vendaData.get("fretePagoPeloCliente") != null ?
+                    Double.valueOf(vendaData.get("fretePagoPeloCliente").toString()) : 0.0;
+            Double custoEnvio = vendaData.get("custoEnvio") != null ?
+                    Double.valueOf(vendaData.get("custoEnvio").toString()) : 0.0;
+            Double tarifaPlataforma = vendaData.get("tarifaPlataforma") != null ?
+                    Double.valueOf(vendaData.get("tarifaPlataforma").toString()) : 0.0;
+            Double despesasOperacionais = vendaData.get("despesasOperacionais") != null ?
+                    Double.valueOf(vendaData.get("despesasOperacionais").toString()) : 0.0;
+
+            // 3. Verificar se o produto existe E PERTENCE AO USUÁRIO
+            Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
+            if (!produtoOpt.isPresent()) {
+                return ResponseEntity.badRequest().body("Produto não encontrado ou não pertence ao usuário");
+            }
+            Produto produto = produtoOpt.get();
+
+            // 4. Verificar se já existe venda com mesmo ID do pedido PARA ESTE USUÁRIO
+            if (vendaRepository.findByIdPedidoAndUser(idPedido, currentUser).isPresent()) {
                 return ResponseEntity.badRequest().body("Já existe uma venda com este ID do pedido");
             }
 
-            // 3. Verificar se tem estoque suficiente
-            Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto.get());
-            if (saldoDisponivel < venda.getQuantidade()) {
-                return ResponseEntity.badRequest().body("Estoque insuficiente");
+            // 5. ✅ CORREÇÃO: Verificar estoque de forma mais robusta
+            Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
+            System.out.println("📦 Verificando estoque - Produto: " + produto.getNome() +
+                    ", Saldo: " + saldoDisponivel + ", Necessário: " + quantidade);
+
+            if (saldoDisponivel < quantidade) {
+                return ResponseEntity.badRequest()
+                        .body("Estoque insuficiente! Disponível: " + saldoDisponivel + " unidades");
             }
 
-            // 🆕 ASSOCIAR USUÁRIO À VENDA
+            // 6. Criar nova venda COM DATA
+            Venda venda = new Venda();
+            venda.setData(dataVenda); // ✅ DEFINIR A DATA (CORREÇÃO CRÍTICA)
+            venda.setIdPedido(idPedido);
+            venda.setPlataforma(plataforma);
+            venda.setQuantidade(quantidade);
+            venda.setProduto(produto);
+            venda.setPrecoVenda(precoVenda);
+            venda.setFretePagoPeloCliente(fretePagoPeloCliente);
+            venda.setCustoEnvio(custoEnvio);
+            venda.setTarifaPlataforma(tarifaPlataforma);
+            venda.setDespesasOperacionais(despesasOperacionais);
             venda.setUser(currentUser);
 
-            // ✅ CORRIGIDO: FLUXO CORRETO
-            // 4. PRIMEIRO: Salvar a venda (para gerar ID)
+            System.out.println("✅ Data da venda definida na entidade: " + venda.getData());
+
+            // 7. PRIMEIRO: Salvar a venda (para gerar ID)
             Venda vendaSalva = vendaRepository.save(venda);
 
-            // 5. SEGUNDO: Calcular custo PEPS E registrar itens (passando venda já salva)
+            // 8. SEGUNDO: Calcular custo PEPS E registrar itens (passando venda já salva)
             BigDecimal custoPEPS = estoqueService.calcularCustoVendaERegistrarItens(vendaSalva);
 
-            return ResponseEntity.ok(vendaSalva);
+            // 9. ATUALIZAR custo do produto na venda
+            vendaSalva.setCustoProdutoVendido(custoPEPS.doubleValue());
+            vendaRepository.save(vendaSalva);
+
+            System.out.println("✅ Venda criada com sucesso: " + vendaSalva.getIdPedido() +
+                    ", Custo PEPS: " + custoPEPS + ", Data: " + vendaSalva.getData());
+
+            return ResponseEntity.ok(new VendaDTO(vendaSalva));
 
         } catch (Exception e) {
             System.out.println("❌ Erro ao criar venda: " + e.getMessage());

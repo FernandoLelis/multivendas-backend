@@ -222,9 +222,36 @@ public class EstoqueService {
         return custoTotal;
     }
 
-    // 🆕 Verifica saldo total de um produto PARA O USUÁRIO LOGADO
+    // ✅ CORREÇÃO CRÍTICA: Verifica saldo total de um produto PARA O USUÁRIO LOGADO
     public Integer verificarSaldoTotal(Produto produto) {
         User currentUser = getCurrentUser();
-        return entradaEstoqueRepository.findSaldoTotalByProdutoAndUser(produto, currentUser);
+
+        try {
+            // ✅ PRIMEIRO: Tentar usar o método do repositório
+            Integer saldo = entradaEstoqueRepository.findSaldoTotalByProdutoAndUser(produto, currentUser);
+            if (saldo != null) {
+                System.out.println("📦 Saldo via repositório: " + saldo + " para produto: " + produto.getNome());
+                return saldo;
+            }
+        } catch (Exception e) {
+            System.out.println("⚠️ Método repositório falhou, usando cálculo manual: " + e.getMessage());
+        }
+
+        // ✅ FALLBACK: Cálculo manual seguro
+        List<EntradaEstoque> entradas = entradaEstoqueRepository.findByProdutoAndUserOrderByDataEntradaAsc(produto, currentUser);
+        Integer saldoManual = 0;
+
+        for (EntradaEstoque entrada : entradas) {
+            // ✅ TRATAR saldo null como 0
+            Integer saldoEntrada = entrada.getSaldo();
+            if (saldoEntrada != null) {
+                saldoManual += saldoEntrada;
+            }
+        }
+
+        System.out.println("📦 Saldo manual calculado: " + saldoManual + " para produto: " + produto.getNome());
+        System.out.println("📦 Total de entradas encontradas: " + entradas.size());
+
+        return saldoManual;
     }
 }
