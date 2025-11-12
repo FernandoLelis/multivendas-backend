@@ -2,7 +2,6 @@ package com.fernando.erp_vendas.config;
 
 import com.fernando.erp_vendas.repository.UserRepository;
 import com.fernando.erp_vendas.service.JwtService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -27,16 +26,12 @@ public class SecurityConfig {
     private final JwtService jwtService;
     private final UserRepository userRepository;
 
-    // ✅ NOVO: Variável para origens permitidas do application.properties
-    @Value("${app.cors.allowed-origins:http://localhost:4200}")
-    private String allowedOrigins;
-
     public SecurityConfig(JwtService jwtService, UserRepository userRepository) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
     }
 
-    // ✅ CORREÇÃO CRÍTICA: Criar o filtro como Bean
+    // ✅ Bean do filtro JWT
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
         return new JwtAuthenticationFilter(jwtService, userRepository);
@@ -53,7 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/migracao/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                // ✅ CORREÇÃO: Usar o Bean do filtro
+                // ✅ Adicionar filtro JWT
                 .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
@@ -63,8 +58,13 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // ✅ ATUALIZADO: Usar variável do application.properties
-        configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
+        // ✅ CORREÇÃO CRÍTICA: Todas as origens definidas explicitamente
+        configuration.setAllowedOrigins(Arrays.asList(
+                "https://erpmultivendas.vercel.app",
+                "https://multivendas-frontend-pqp2py6jb-fernandolelis-projects.vercel.app",
+                "http://localhost:4200",
+                "https://multivendas-frontend.vercel.app"
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "X-Auth-Token"));
         configuration.setExposedHeaders(Arrays.asList("Authorization", "Content-Disposition"));

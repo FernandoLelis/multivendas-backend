@@ -12,6 +12,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
                 .allowedOrigins(
+                        "https://erpmultivendas.vercel.app",  // ✅ NOVO DOMÍNIO
                         "https://multivendas-frontend-pqp2py6jb-fernandolelis-projects.vercel.app",
                         "http://localhost:4200",
                         "https://multivendas-frontend.vercel.app"
