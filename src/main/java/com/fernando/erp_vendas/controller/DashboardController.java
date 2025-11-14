@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import com.fernando.erp_vendas.repository.VendaRepository;
 import com.fernando.erp_vendas.repository.DespesaRepository;
@@ -35,6 +36,18 @@ public class DashboardController {
             return (User) authentication.getPrincipal();
         }
         throw new RuntimeException("Usuário não autenticado");
+    }
+
+    // 🆕 ENDPOINT DE HEALTH CHECK PARA GITHUB ACTIONS
+    @GetMapping("/api/health")
+    public ResponseEntity<?> healthCheck() {
+        return ResponseEntity.ok("{\"status\": \"UP\", \"timestamp\": \"" + LocalDateTime.now() + "\", \"service\": \"Multivendas Backend\"}");
+    }
+
+    // 🆕 ENDPOINT SIMPLES PARA PING (não requer autenticação)
+    @GetMapping("/health")
+    public ResponseEntity<?> simpleHealthCheck() {
+        return ResponseEntity.ok("{\"status\": \"OK\", \"timestamp\": \"" + LocalDateTime.now() + "\"}");
     }
 
     @GetMapping("/dashboard")
