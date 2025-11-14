@@ -40,12 +40,14 @@ public class DashboardController {
 
     // 🆕 ENDPOINT DE HEALTH CHECK PARA GITHUB ACTIONS
     @GetMapping("/api/health")
+    @CrossOrigin(origins = "*")  // ✅ PERMITE ACESSO DE QUALQUER LUGAR
     public ResponseEntity<?> healthCheck() {
         return ResponseEntity.ok("{\"status\": \"UP\", \"timestamp\": \"" + LocalDateTime.now() + "\", \"service\": \"Multivendas Backend\"}");
     }
 
     // 🆕 ENDPOINT SIMPLES PARA PING (não requer autenticação)
     @GetMapping("/health")
+    @CrossOrigin(origins = "*")  // ✅ PERMITE ACESSO DE QUALQUER LUGAR
     public ResponseEntity<?> simpleHealthCheck() {
         return ResponseEntity.ok("{\"status\": \"OK\", \"timestamp\": \"" + LocalDateTime.now() + "\"}");
     }
