@@ -1,11 +1,13 @@
-# Use a imagem base mais básica do OpenJDK
-FROM openjdk:17
-
+# Build stage
+FROM maven:3.8.4-openjdk-17 AS builder
 WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-# Copie o JAR (precisamos construir primeiro)
-COPY target/*.jar app.jar
-
+# Runtime stage  
+FROM openjdk:17
+WORKDIR /app
+COPY --from=builder /app/target/*.jar app.jar
 EXPOSE 8080
-
 ENTRYPOINT ["java", "-jar", "app.jar"]
