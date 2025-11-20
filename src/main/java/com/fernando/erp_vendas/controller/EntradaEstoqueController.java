@@ -15,6 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -41,7 +42,7 @@ public class EntradaEstoqueController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
-    // ✅ CORRIGIDO: Registrar nova entrada de estoque (COMPRA) PARA O USUÁRIO
+    // ✅ CORRIGIDO: Registrar nova entrada de estoque (COMPRA) PARA O USUÁRIO COM DATA
     @PostMapping("/entrada")
     public ResponseEntity<?> registrarEntrada(
             @RequestParam Long produtoId,
@@ -50,7 +51,8 @@ public class EntradaEstoqueController {
             @RequestParam(required = false) String fornecedor,
             @RequestParam String idPedidoCompra,
             @RequestParam String categoria,
-            @RequestParam(required = false) String observacoes) {
+            @RequestParam(required = false) String observacoes,
+            @RequestParam(required = false) String dataEntrada) { // ✅ NOVO: parâmetro dataEntrada
 
         try {
             User currentUser = getCurrentUser();
@@ -73,17 +75,29 @@ public class EntradaEstoqueController {
                         .body("Já existe uma compra cadastrada com este ID do Pedido: " + idPedidoCompra);
             }
 
-            // ✅ CORREÇÃO CRÍTICA: Cria entrada com cálculo automático de custo unitário e saldo
+            // ✅ CORREÇÃO: Cria entrada com cálculo automático de custo unitário e saldo
             EntradaEstoque entrada = new EntradaEstoque(
                     produto,
                     quantidade,
                     custoTotal,
                     fornecedor != null ? fornecedor : "",
-                    idPedidoCompra, // ✅ ID ORIGINAL DO USUÁRIO (sem modificação)
+                    idPedidoCompra,
                     categoria,
                     observacoes != null ? observacoes : "",
                     currentUser
             );
+
+            // ✅ NOVO: DEFINIR DATA PERSONALIZADA SE FORNECIDA
+            if (dataEntrada != null && !dataEntrada.trim().isEmpty()) {
+                try {
+                    // Converter string para LocalDateTime (formato: "2024-11-20T10:30:00")
+                    LocalDateTime dataCustomizada = LocalDateTime.parse(dataEntrada);
+                    entrada.setDataEntrada(dataCustomizada);
+                } catch (Exception e) {
+                    // Se falhar, mantém a data atual (comportamento original)
+                    System.out.println("⚠️ Data inválida, usando data atual: " + dataEntrada);
+                }
+            }
 
             // ✅ CORREÇÃO: CALCULAR CUSTO UNITÁRIO AUTOMATICAMENTE
             if (quantidade != null && quantidade > 0) {
@@ -116,7 +130,7 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅ ATUALIZADO: Atualizar entrada de estoque (COMPRA) DO USUÁRIO
+    // ✅ ATUALIZADO: Atualizar entrada de estoque (COMPRA) DO USUÁRIO COM DATA
     @PutMapping("/entrada/{id}")
     public ResponseEntity<?> atualizarEntrada(
             @PathVariable Long id,
@@ -126,7 +140,8 @@ public class EntradaEstoqueController {
             @RequestParam(required = false) String fornecedor,
             @RequestParam String idPedidoCompra,
             @RequestParam String categoria,
-            @RequestParam(required = false) String observacoes) {
+            @RequestParam(required = false) String observacoes,
+            @RequestParam(required = false) String dataEntrada) { // ✅ NOVO: parâmetro dataEntrada
 
         try {
             User currentUser = getCurrentUser();
@@ -175,6 +190,16 @@ public class EntradaEstoqueController {
                                 "Exclua as VENDAS que utilizaram este lote para liberar a edição.");
             }
 
+            // ✅ NOVO: ATUALIZAR DATA SE FORNECIDA
+            if (dataEntrada != null && !dataEntrada.trim().isEmpty()) {
+                try {
+                    LocalDateTime dataCustomizada = LocalDateTime.parse(dataEntrada);
+                    entradaExistente.setDataEntrada(dataCustomizada);
+                } catch (Exception e) {
+                    System.out.println("⚠️ Data inválida na atualização, mantendo data original: " + dataEntrada);
+                }
+            }
+
             // Atualiza os campos da entrada existente
             entradaExistente.setProduto(produto);
             entradaExistente.setQuantidade(quantidade);
@@ -216,7 +241,7 @@ public class EntradaEstoqueController {
         try {
             User currentUser = getCurrentUser();
 
-            // 1. Buscar todas as entradas do sistema (apenas para análise)
+            // 1. Buscar todas as entradas no sistema (apenas para análise)
             List<EntradaEstoque> todasEntradas = entradaEstoqueRepository.findAll();
 
             // 2. Encontrar entradas sem usuário (dados antigos)
