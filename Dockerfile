@@ -17,13 +17,16 @@ COPY src ./src
 # ✅ Usar Maven Wrapper para build
 RUN ./mvnw clean package -DskipTests
 
+# ✅ DEBUG: Listar arquivos para verificar o JAR
+RUN ls -la /app/target/
+
 # Runtime stage - use JRE 17 (menor)
 FROM eclipse-temurin:17-jre
 
 WORKDIR /app
 
-# ✅ Copiar JAR gerado
-COPY --from=builder /app/target/*.jar app.jar
+# ✅ CORREÇÃO: Copiar JAR com o nome EXATO gerado pelo Spring Boot
+COPY --from=builder /app/target/erp-vendas-0.0.1-SNAPSHOT.jar app.jar
 
 # Expor porta
 EXPOSE 8080

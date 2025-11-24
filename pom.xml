@@ -11,7 +11,7 @@
     <groupId>com.fernando</groupId>
     <artifactId>erp-vendas</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>crm-vendas</name>
+    <name>erp-vendas</name>
     <description>Sistema ERP para gestão de vendas Amazon e Mercado Livre</description>
     <url/>
     <licenses>
