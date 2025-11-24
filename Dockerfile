@@ -1,32 +1,21 @@
-# Build stage - usar JDK 17 (LTS)
-FROM eclipse-temurin:17-jdk as builder
+# Use uma imagem com Maven e JDK já instalados
+FROM maven:3.8.6-openjdk-17 AS build
 
 WORKDIR /app
 
-# ✅ Copiar arquivos do Maven Wrapper PRIMEIRO
-COPY mvnw .
-COPY .mvn .mvn
-COPY pom.xml .
+# Copiar arquivos do projeto
+COPY . .
 
-# ✅ Dar permissão de execução ao mvnw
-RUN chmod +x mvnw
+# Fazer o build
+RUN mvn clean package -DskipTests
 
-# Copiar código fonte
-COPY src ./src
-
-# ✅ Usar Maven Wrapper para build
-RUN ./mvnw clean package -DskipTests
-
-# ✅ DEBUG: Listar arquivos para verificar o JAR
-RUN ls -la /app/target/
-
-# Runtime stage - use JRE 17 (menor)
-FROM eclipse-temurin:17-jre
+# Imagem final menor
+FROM openjdk:17-jre-slim
 
 WORKDIR /app
 
-# ✅ CORREÇÃO: Copiar JAR com o nome EXATO gerado pelo Spring Boot
-COPY --from=builder /app/target/erp-vendas-0.0.1-SNAPSHOT.jar app.jar
+# Copiar o JAR do estágio de build
+COPY --from=build /app/target/*.jar app.jar
 
 # Expor porta
 EXPOSE 8080
