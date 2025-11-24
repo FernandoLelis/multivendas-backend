@@ -1,28 +1,28 @@
-# Build stage
+# Build stage - usar JDK 17 (LTS)
 FROM eclipse-temurin:17-jdk as builder
 
 WORKDIR /app
 
-# ✅ CORREÇÃO: Copiar TODOS os arquivos do Maven Wrapper PRIMEIRO
+# ✅ Copiar arquivos do Maven Wrapper PRIMEIRO
 COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
 
-# ✅ CORREÇÃO: Dar permissão de execução ao mvnw (Linux/Mac)
+# ✅ Dar permissão de execução ao mvnw
 RUN chmod +x mvnw
 
 # Copiar código fonte
 COPY src ./src
 
-# ✅ CORREÇÃO: Usar o Maven Wrapper para build
+# ✅ Usar Maven Wrapper para build
 RUN ./mvnw clean package -DskipTests
 
-# Runtime stage - use JRE menor
+# Runtime stage - use JRE 17 (menor)
 FROM eclipse-temurin:17-jre
 
 WORKDIR /app
 
-# ✅ CORREÇÃO: Copiar o JAR gerado do stage de build
+# ✅ Copiar JAR gerado
 COPY --from=builder /app/target/*.jar app.jar
 
 # Expor porta
