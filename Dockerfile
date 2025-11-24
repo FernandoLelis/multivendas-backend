@@ -1,5 +1,5 @@
-# Use uma imagem com Maven e JDK já instalados
-FROM maven:3.8.6-openjdk-17 AS build
+# Use uma imagem com Maven e JDK já instalados (imagem válida)
+FROM maven:3.8.7-openjdk-17 AS build
 
 WORKDIR /app
 
