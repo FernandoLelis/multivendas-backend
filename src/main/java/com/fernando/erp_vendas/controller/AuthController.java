@@ -14,7 +14,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "${FRONTEND_URL:http://localhost:4200}")
+@CrossOrigin(origins = {"https://erpmultivendas.vercel.app", "http://localhost:4200"}) // ✅ CORREÇÃO: AMBAS ORIGENS
 public class AuthController {
 
     @Autowired
@@ -131,12 +131,11 @@ public class AuthController {
         return errorResponse;
     }
 
-    // ✅ CLASSES INTERNAS CORRETAS - DENTRO DA CLASSE PRINCIPAL
+    // ✅ CLASSES INTERNAS CORRETAS
     public static class LoginRequest {
         private String email;
         private String password;
 
-        // Getters e Setters
         public String getEmail() { return email; }
         public void setEmail(String email) { this.email = email; }
         public String getPassword() { return password; }
@@ -148,7 +147,6 @@ public class AuthController {
         private String password;
         private String nome;
 
-        // Getters e Setters
         public String getEmail() { return email; }
         public void setEmail(String email) { this.email = email; }
         public String getPassword() { return password; }
