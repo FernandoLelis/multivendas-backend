@@ -58,12 +58,13 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // ✅ CORREÇÃO CRÍTICA: Todas as origens definidas explicitamente
-        configuration.setAllowedOrigins(Arrays.asList(
+        // ✅ CORREÇÃO CRÍTICA: Usar allowedOriginPatterns em vez de allowedOrigins
+        configuration.setAllowedOriginPatterns(Arrays.asList(
                 "https://erpmultivendas.vercel.app",
                 "https://multivendas-frontend-pqp2py6jb-fernandolelis-projects.vercel.app",
                 "http://localhost:4200",
-                "https://multivendas-frontend.vercel.app"
+                "https://multivendas-frontend.vercel.app",
+                "https://*.vercel.app"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "X-Auth-Token"));

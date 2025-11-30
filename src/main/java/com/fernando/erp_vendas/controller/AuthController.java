@@ -14,7 +14,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = {"https://erpmultivendas.vercel.app", "http://localhost:4200"}) // ✅ CORREÇÃO: AMBAS ORIGENS
+//@CrossOrigin(origins = {"https://erpmultivendas.vercel.app", "http://localhost:4200"}) // ✅ CORREÇÃO: AMBAS ORIGENS
 public class AuthController {
 
     @Autowired
