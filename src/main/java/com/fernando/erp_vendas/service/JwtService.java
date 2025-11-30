@@ -5,6 +5,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
@@ -17,8 +18,10 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    // ✅ CORREÇÃO: Usar chave FIXA para não invalidar tokens
-    private final String secretKey = "minhaChaveSecretaSuperSeguraParaJWTTokenMultivendas2025QueTemExatamente64BytesParaHS256";
+    // ✅ CORREÇÃO: Usar variável de ambiente do Railway
+    @Value("${jwt.secret:minhaChaveSecretaSuperSeguraParaJWTTokenMultivendas2025QueTemExatamente64BytesParaHS256}")
+    private String secretKey;
+
     private final long expiration = 86400000; // 24 horas
 
     // Extrair username do token
@@ -81,7 +84,7 @@ public class JwtService {
                 .compact();
     }
 
-    // ✅ CORREÇÃO: Usar chave FIXA baseada na string secreta
+    // ✅ CORREÇÃO: Usar chave da variável de ambiente
     private Key getSignKey() {
         byte[] keyBytes = secretKey.getBytes();
         return Keys.hmacShaKeyFor(keyBytes);

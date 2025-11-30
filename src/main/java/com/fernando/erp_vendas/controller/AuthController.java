@@ -14,7 +14,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "http://localhost:4200")
+@CrossOrigin(origins = "${FRONTEND_URL:http://localhost:4200}")
 public class AuthController {
 
     @Autowired
@@ -130,30 +130,30 @@ public class AuthController {
         errorResponse.put("error", message);
         return errorResponse;
     }
-}
 
-// ✅ MOVER AS CLASSES PARA FORA DA CLASSE PRINCIPAL
-class LoginRequest {
-    private String email;
-    private String password;
+    // ✅ CLASSES INTERNAS CORRETAS - DENTRO DA CLASSE PRINCIPAL
+    public static class LoginRequest {
+        private String email;
+        private String password;
 
-    // Getters e Setters
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
-}
+        // Getters e Setters
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
+    }
 
-class RegisterRequest {
-    private String email;
-    private String password;
-    private String nome;
+    public static class RegisterRequest {
+        private String email;
+        private String password;
+        private String nome;
 
-    // Getters e Setters
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
-    public String getNome() { return nome; }
-    public void setNome(String nome) { this.nome = nome; }
+        // Getters e Setters
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
+        public String getNome() { return nome; }
+        public void setNome(String nome) { this.nome = nome; }
+    }
 }
