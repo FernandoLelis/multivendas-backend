@@ -11,13 +11,14 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOrigins(
-                        "https://erpmultivendas.vercel.app",  // ✅ NOVO DOMÍNIO
+                .allowedOriginPatterns( // ✅ CORREÇÃO CRÍTICA: allowedOriginPatterns
+                        "https://erpmultivendas.vercel.app",
                         "https://multivendas-frontend-pqp2py6jb-fernandolelis-projects.vercel.app",
                         "http://localhost:4200",
-                        "https://multivendas-frontend.vercel.app"
+                        "https://multivendas-frontend.vercel.app",
+                        "https://*.vercel.app" // ✅ PADRÃO CURINGA
                 )
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                 .allowedHeaders("*")
                 .allowCredentials(true)
                 .maxAge(3600);
