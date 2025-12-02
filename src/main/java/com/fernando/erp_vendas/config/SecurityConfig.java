@@ -16,10 +16,13 @@ public class SecurityConfig {
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        System.out.println("🔒 SecurityConfig criado com JWT Filter");
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        System.out.println("🔒 Configurando SecurityFilterChain...");
+
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
@@ -29,7 +32,7 @@ public class SecurityConfig {
                         // Endpoints públicos
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/health").permitAll()
-                        .requestMatchers("/api/migracao/**").permitAll() // Se houver migração
+                        .requestMatchers("/api/migracao/**").permitAll()
 
                         // Todos os outros endpoints requerem autenticação
                         .anyRequest().authenticated()
