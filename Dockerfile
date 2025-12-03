@@ -1,5 +1,5 @@
 # Use uma imagem com Java 17
-FROM openjdk:17-jdk-slim
+FROM openjdk:17-slim
 
 # Diretório de trabalho
 WORKDIR /app
