@@ -1,5 +1,5 @@
-# Use uma imagem com Java 17
-FROM openjdk:17-slim
+# Use Amazon Corretto 17 (JDK da Amazon - sempre funciona)
+FROM amazoncorretto:17-alpine-jdk
 
 # Diretório de trabalho
 WORKDIR /app
