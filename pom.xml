@@ -50,6 +50,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- ✅ SPRING BOOT ACTUATOR (HEALTH CHECK) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- ✅ NOVAS DEPENDÊNCIAS DE SEGURANÇA -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
