@@ -1,0 +1,15 @@
+# .dockerignore
+.git
+.gitignore
+target/
+*.log
+*.jar
+*.war
+*.ear
+.DS_Store
+.classpath
+.project
+.settings
+.idea
+.vscode
+*.iml

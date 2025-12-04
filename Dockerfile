@@ -1,26 +1,37 @@
-# Use Amazon Corretto 17
-FROM amazoncorretto:17-alpine-jdk
+# Dockerfile para Spring Boot com Maven
+FROM maven:3.9.9-eclipse-temurin-17-alpine AS build
 
-# Instale Maven (Alpine Linux usa apk)
-RUN apk add --no-cache maven
-
-# Diretório de trabalho
+# Define diretório de trabalho
 WORKDIR /app
 
-# Copie o pom.xml primeiro para cache eficiente
+# Copia arquivos do Maven primeiro (cache de dependências)
 COPY pom.xml .
-
-# Baixe dependências
 RUN mvn dependency:go-offline
 
-# Copie o código fonte
+# Copia o código fonte
 COPY src ./src
 
-# Compile o projeto
+# Build da aplicação
 RUN mvn clean package -DskipTests
 
-# Porta que a aplicação usa
-EXPOSE 8080
+# Segunda etapa: imagem final menor
+FROM eclipse-temurin:17-jre-alpine
+
+# Instala curl para health checks
+RUN apk add --no-cache curl
+
+# Define diretório de trabalho
+WORKDIR /app
+
+# Copia o JAR do estágio de build
+COPY --from=build /app/target/*.jar app.jar
+
+# Expõe a porta (Render usa variável PORT)
+EXPOSE 10000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:10000/health || exit 1
 
 # Comando para rodar a aplicação
-ENTRYPOINT ["java", "-jar", "target/erp-vendas-0.0.1-SNAPSHOT.jar"]
+ENTRYPOINT ["sh", "-c", "java -jar app.jar --server.port=${PORT:-10000}"]
