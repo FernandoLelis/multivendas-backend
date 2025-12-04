@@ -10,12 +10,11 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns(
+                .allowedOrigins(
                         "https://erpmultivendas.vercel.app",
                         "https://multivendas-frontend-pqp2py6jb-fernandolelis-projects.vercel.app",
                         "http://localhost:4200",
-                        "https://multivendas-frontend.vercel.app",
-                        "https://*.vercel.app"
+                        "https://multivendas-frontend.vercel.app"
                 )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                 .allowedHeaders("*")
