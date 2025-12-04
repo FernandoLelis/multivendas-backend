@@ -11,6 +11,8 @@ import java.util.List;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.fernando.erp_vendas.repository.VendaRepository;
 import com.fernando.erp_vendas.repository.DespesaRepository;
@@ -57,14 +59,23 @@ public class DashboardController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
-    // 🆕 ENDPOINT DE HEALTH CHECK ÚNICO E PADRÃO
-    @GetMapping("/health")
-    public ResponseEntity<HealthResponse> healthCheck() {
-        HealthResponse response = new HealthResponse(
-                "UP",
-                LocalDateTime.now().toString(),
-                "Multivendas Backend"
-        );
+    // 🆕 ENDPOINT DE HEALTH CHECK - AGORA EM /api/health
+    @GetMapping("/api/health")
+    public ResponseEntity<Map<String, String>> healthCheck() {
+        Map<String, String> response = new HashMap<>();
+        response.put("status", "UP");
+        response.put("timestamp", LocalDateTime.now().toString());
+        response.put("service", "Multivendas Backend");
+        response.put("version", "1.0.0");
+        return ResponseEntity.ok(response);
+    }
+
+    // 🆕 ENDPOINT PÚBLICO DE TESTE
+    @GetMapping("/api/test")
+    public ResponseEntity<Map<String, String>> testEndpoint() {
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "API está funcionando!");
+        response.put("timestamp", LocalDateTime.now().toString());
         return ResponseEntity.ok(response);
     }
 

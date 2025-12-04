@@ -60,8 +60,9 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         // Endpoints públicos
+                        .requestMatchers("/api/health").permitAll()
+                        .requestMatchers("/api/test").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/health").permitAll()
                         .requestMatchers("/api/migracao/**").permitAll()
 
                         // Todos os outros endpoints requerem autenticação
