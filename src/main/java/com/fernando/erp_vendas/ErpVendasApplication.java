@@ -5,25 +5,51 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
 @SpringBootApplication
-@RestController  // ← ADICIONE ESTA LINHA
+@RestController
 public class ErpVendasApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(ErpVendasApplication.class, args);
     }
 
-    // 🆕 ADICIONE ESTE MÉTODO DE TESTE
+    // 🆕 ENDPOINT DE TESTE NA CLASSE PRINCIPAL
     @GetMapping("/app-test")
-    public String appTest() {
+    public Map<String, String> appTest() {
         System.out.println("🎯 ERPVENDASAPPLICATION - Endpoint /app-test CHAMADO!");
-        return "Aplicação Spring Boot funcionando! - " + java.time.LocalDateTime.now();
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Aplicação Spring Boot funcionando!");
+        response.put("timestamp", LocalDateTime.now().toString());
+        response.put("status", "SUCCESS");
+        return response;
     }
 
-    // 🆕 ADICIONE TAMBÉM UM HEALTH SIMPLES
+    // 🆕 HEALTH CHECK SIMPLES
     @GetMapping("/app-health")
-    public String appHealth() {
+    public Map<String, String> appHealth() {
         System.out.println("🎯 ERPVENDASAPPLICATION - Endpoint /app-health CHAMADO!");
-        return "{\"status\":\"OK\",\"app\":\"ErpVendas\",\"time\":\"" + java.time.LocalDateTime.now() + "\"}";
+        Map<String, String> response = new HashMap<>();
+        response.put("status", "OK");
+        response.put("service", "ERP Vendas Backend");
+        response.put("timestamp", LocalDateTime.now().toString());
+        response.put("environment", System.getenv("SPRING_PROFILES_ACTIVE") != null ?
+                System.getenv("SPRING_PROFILES_ACTIVE") : "default");
+        return response;
+    }
+
+    // 🆕 ENDPOINT RAIZ
+    @GetMapping("/")
+    public Map<String, String> home() {
+        System.out.println("🎯 ERPVENDASAPPLICATION - Endpoint / (raiz) CHAMADO!");
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "ERP Vendas API - Sistema de gestão multivendas");
+        response.put("version", "1.0.0");
+        response.put("status", "online");
+        response.put("timestamp", LocalDateTime.now().toString());
+        return response;
     }
 }

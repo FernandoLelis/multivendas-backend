@@ -5,10 +5,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -18,13 +21,6 @@ import java.util.Arrays;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
-
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-        System.out.println("🔒 SecurityConfig criado com JWT Filter");
-    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -49,8 +45,20 @@ public class SecurityConfig {
     }
 
     @Bean
+    public UserDetailsService userDetailsService() {
+        // 🆕 Cria usuário em memória para testes (sem depender do banco)
+        UserDetails user = User.builder()
+                .username("test@email.com")
+                .password(passwordEncoder().encode("password"))
+                .roles("USER")
+                .build();
+
+        return new InMemoryUserDetailsManager(user);
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        System.out.println("🔒 Configurando SecurityFilterChain...");
+        System.out.println("🔒 Configurando SecurityFilterChain SEM dependência do banco...");
 
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -59,19 +67,10 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        // Endpoints públicos
-                        .requestMatchers("/health").permitAll()
-                        .requestMatchers("/api/health").permitAll()
-                        .requestMatchers("/api/test").permitAll()
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/migracao/**").permitAll()
-                        .requestMatchers("/test-simple").permitAll()
-                        .requestMatchers("/health-simple").permitAll()
-
-                        // Todos os outros endpoints requerem autenticação
-                        .anyRequest().authenticated()
-                )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                        // ⚠️ PERMITE TODOS OS ENDPOINTS temporariamente
+                        // Isso vai testar se a aplicação sobe sem falhas no banco
+                        .anyRequest().permitAll()
+                );
 
         return http.build();
     }
