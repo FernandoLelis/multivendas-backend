@@ -59,14 +59,14 @@ public class DashboardController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
-    // 🆕 ENDPOINT DE HEALTH CHECK - AGORA EM /api/health
-    @GetMapping("/api/health")
-    public ResponseEntity<Map<String, String>> healthCheck() {
+    // 🆕 ENDPOINT ESPECIAL PARA RENDER HEALTH CHECK
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, String>> renderHealthCheck() {
         Map<String, String> response = new HashMap<>();
         response.put("status", "UP");
         response.put("timestamp", LocalDateTime.now().toString());
-        response.put("service", "Multivendas Backend");
-        response.put("version", "1.0.0");
+        response.put("service", "Multivendas Backend - Render Health");
+        response.put("note", "Use /api/health para API health check");
         return ResponseEntity.ok(response);
     }
 
