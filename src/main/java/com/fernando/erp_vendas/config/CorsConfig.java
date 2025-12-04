@@ -14,10 +14,11 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOrigins(
+                        .allowedOriginPatterns(
                                 "http://localhost:4200",
                                 "https://erpmultivendas.vercel.app",
-                                "https://multivendas-frontend.vercel.app"
+                                "https://multivendas-frontend.vercel.app",
+                                "https://*.vercel.app"  // ← Aceita qualquer subdomínio do Vercel
                         )
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                         .allowedHeaders("*")
