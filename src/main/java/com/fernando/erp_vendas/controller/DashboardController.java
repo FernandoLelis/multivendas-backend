@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,7 +19,6 @@ import com.fernando.erp_vendas.model.User;
 import com.fernando.erp_vendas.dto.DashboardData;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:4200")
 public class DashboardController {
 
     @Autowired
@@ -28,6 +26,27 @@ public class DashboardController {
 
     @Autowired
     private DespesaRepository despesaRepository;
+
+    // 🆕 DTO SIMPLES PARA HEALTH CHECK
+    public static class HealthResponse {
+        private String status;
+        private String timestamp;
+        private String service;
+
+        public HealthResponse(String status, String timestamp, String service) {
+            this.status = status;
+            this.timestamp = timestamp;
+            this.service = service;
+        }
+
+        // Getters e Setters
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+        public String getTimestamp() { return timestamp; }
+        public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
+        public String getService() { return service; }
+        public void setService(String service) { this.service = service; }
+    }
 
     // 🆕 MÉTODO PARA OBTER USUÁRIO LOGADO
     private User getCurrentUser() {
@@ -38,18 +57,15 @@ public class DashboardController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
-    // 🆕 ENDPOINT DE HEALTH CHECK PARA GITHUB ACTIONS
-    @GetMapping("/api/health")
-    @CrossOrigin(origins = "*")  // ✅ PERMITE ACESSO DE QUALQUER LUGAR
-    public ResponseEntity<?> healthCheck() {
-        return ResponseEntity.ok("{\"status\": \"UP\", \"timestamp\": \"" + LocalDateTime.now() + "\", \"service\": \"Multivendas Backend\"}");
-    }
-
-    // 🆕 ENDPOINT SIMPLES PARA PING (não requer autenticação)
+    // 🆕 ENDPOINT DE HEALTH CHECK ÚNICO E PADRÃO
     @GetMapping("/health")
-    @CrossOrigin(origins = "*")  // ✅ PERMITE ACESSO DE QUALQUER LUGAR
-    public ResponseEntity<?> simpleHealthCheck() {
-        return ResponseEntity.ok("{\"status\": \"OK\", \"timestamp\": \"" + LocalDateTime.now() + "\"}");
+    public ResponseEntity<HealthResponse> healthCheck() {
+        HealthResponse response = new HealthResponse(
+                "UP",
+                LocalDateTime.now().toString(),
+                "Multivendas Backend"
+        );
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/dashboard")
