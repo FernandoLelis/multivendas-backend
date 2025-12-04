@@ -62,6 +62,9 @@ public class DashboardController {
     // 🆕 ENDPOINT ESPECIAL PARA RENDER HEALTH CHECK
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> renderHealthCheck() {
+        // 🆕 LOG PARA DEBUG
+        System.out.println("🎯 DASHBOARD CONTROLLER - Endpoint /health chamado!");
+
         Map<String, String> response = new HashMap<>();
         response.put("status", "UP");
         response.put("timestamp", LocalDateTime.now().toString());

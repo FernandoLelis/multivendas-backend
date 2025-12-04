@@ -65,6 +65,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/test").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/migracao/**").permitAll()
+                        .requestMatchers("/test-simple").permitAll()
+                        .requestMatchers("/health-simple").permitAll()
 
                         // Todos os outros endpoints requerem autenticação
                         .anyRequest().authenticated()
