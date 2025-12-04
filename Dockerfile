@@ -17,7 +17,7 @@ RUN mvn clean package -DskipTests
 # Segunda etapa: imagem final menor
 FROM eclipse-temurin:17-jre-alpine
 
-# Instala curl para health checks
+# Instala curl para health checks (opcional, pode remover se quiser)
 RUN apk add --no-cache curl
 
 # Define diretório de trabalho
@@ -28,10 +28,6 @@ COPY --from=build /app/target/*.jar app.jar
 
 # Expõe a porta (Render usa variável PORT)
 EXPOSE 10000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:10000/health || exit 1
 
 # Comando para rodar a aplicação
 ENTRYPOINT ["sh", "-c", "java -jar app.jar --server.port=${PORT:-10000}"]
