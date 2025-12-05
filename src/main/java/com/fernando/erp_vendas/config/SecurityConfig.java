@@ -2,6 +2,7 @@ package com.fernando.erp_vendas.config;
 
 import com.fernando.erp_vendas.repository.UserRepository;
 import com.fernando.erp_vendas.service.JwtService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -98,6 +99,15 @@ public class SecurityConfig {
 
                         // Todos os outros endpoints exigem autenticação
                         .anyRequest().authenticated()
+                )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            // Log personalizado para erros de autenticação
+                            System.out.println("🚫 Acesso não autorizado: " + request.getRequestURI() + " - " + authException.getMessage());
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json");
+                            response.getWriter().write("{\"error\": \"Acesso não autorizado. Token JWT necessário ou inválido.\"}");
+                        })
                 )
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
