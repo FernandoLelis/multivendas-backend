@@ -94,7 +94,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Endpoints públicos (sem autenticação)
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()  // Todos endpoints do Actuator
+                        .requestMatchers("/health").permitAll()       // Endpoint direto /health
                         .requestMatchers("/").permitAll()
 
                         // Todos os outros endpoints exigem autenticação

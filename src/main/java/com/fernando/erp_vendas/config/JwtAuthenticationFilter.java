@@ -31,6 +31,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
+        // Pular filtro para endpoints públicos
+        String requestURI = request.getRequestURI();
+        if (requestURI.startsWith("/api/auth/") ||
+                requestURI.startsWith("/actuator/") ||
+                requestURI.equals("/health") ||
+                requestURI.equals("/")) {
+            System.out.println("✅ JWT FILTER - Endpoint público, pulando filtro: " + requestURI);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         System.out.println("🚀 JWT FILTER - Iniciando para: " + request.getMethod() + " " + request.getRequestURI());
 
         final String authHeader = request.getHeader("Authorization");
