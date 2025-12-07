@@ -213,13 +213,25 @@ public class VendaController {
         }
     }
 
-    // GET - Listar vendas por dia DO USUÁRIO
+    // ✅ ATUALIZADO: GET - Listar vendas por dia DO USUÁRIO COM FILTRO
     @GetMapping("/vendas-por-dia")
-    public ResponseEntity<?> getVendasPorDia() {
+    public ResponseEntity<?> getVendasPorDia(
+            @RequestParam(required = false) Integer mes,
+            @RequestParam(required = false) Integer ano) {
+
         try {
             User currentUser = getCurrentUser();
-            List<Object[]> resultados = vendaRepository.findVendasPorDia(currentUser);
+            List<Object[]> resultados;
             Map<String, Integer> vendasPorDia = new HashMap<>();
+
+            // 🆕 LÓGICA COM FILTRO
+            if (mes != null && ano != null) {
+                // Buscar apenas vendas do mês/ano especificado
+                resultados = vendaRepository.findVendasPorDiaDoMes(currentUser, mes, ano);
+            } else {
+                // Buscar todas as vendas (compatibilidade)
+                resultados = vendaRepository.findVendasPorDia(currentUser);
+            }
 
             for (Object[] resultado : resultados) {
                 Date data = (Date) resultado[0];

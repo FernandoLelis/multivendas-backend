@@ -62,6 +62,10 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     @Query("SELECT DATE(v.data), COUNT(v) FROM Venda v WHERE v.user = :user GROUP BY DATE(v.data) ORDER BY DATE(v.data)")
     List<Object[]> findVendasPorDia(@Param("user") User user);
 
+    // 🆕 CONSULTA ADICIONADA: Consultar total de vendas por dia COM FILTRO DE MÊS/ANO
+    @Query("SELECT DATE(v.data), COUNT(v) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = :ano AND MONTH(v.data) = :mes GROUP BY DATE(v.data) ORDER BY DATE(v.data)")
+    List<Object[]> findVendasPorDiaDoMes(@Param("user") User user, @Param("mes") int mes, @Param("ano") int ano);
+
     // Consultar produtos mais vendidos DO USUÁRIO
     @Query("SELECT v.produto.nome, SUM(v.quantidade) FROM Venda v WHERE v.user = :user GROUP BY v.produto.nome ORDER BY SUM(v.quantidade) DESC")
     List<Object[]> findProdutosMaisVendidos(@Param("user") User user);
