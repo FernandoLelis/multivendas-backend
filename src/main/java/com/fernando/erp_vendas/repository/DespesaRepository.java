@@ -61,6 +61,10 @@ public interface DespesaRepository extends JpaRepository<Despesa, Long> {
     @Query("SELECT SUM(d.valor) FROM Despesa d WHERE d.user = :user AND YEAR(d.data) = YEAR(CURRENT_DATE) AND MONTH(d.data) = MONTH(CURRENT_DATE)")
     BigDecimal calcularTotalDespesasMesAtual(@Param("user") User user);
 
+    // 🆕 Calcular total de despesas do ANO ATUAL DO USUÁRIO
+    @Query("SELECT SUM(d.valor) FROM Despesa d WHERE d.user = :user AND YEAR(d.data) = YEAR(CURRENT_DATE)")
+    BigDecimal calcularTotalDespesasAnoAtual(@Param("user") User user);
+
     // 🆕 Calcular média mensal de despesas DO USUÁRIO
     @Query("SELECT AVG(d.valor) FROM Despesa d WHERE d.user = :user AND d.data >= :inicio")
     BigDecimal calcularMediaMensalDespesas(@Param("user") User user, @Param("inicio") LocalDate inicio);

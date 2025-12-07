@@ -94,6 +94,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Endpoints públicos (sem autenticação)
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/migracao/database/**").permitAll()  // ← LINHA ADICIONADA: Migração sem autenticação
                         .requestMatchers("/actuator/**").permitAll()  // Todos endpoints do Actuator
                         .requestMatchers("/health").permitAll()       // Endpoint direto /health
                         .requestMatchers("/").permitAll()

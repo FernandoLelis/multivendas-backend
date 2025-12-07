@@ -235,6 +235,18 @@ public class DespesaController {
         }
     }
 
+    // ✅ ATUALIZADO: GET - Calcular total de despesas do ANO ATUAL DO USUÁRIO
+    @GetMapping("/total-ano-atual")
+    public ResponseEntity<?> calcularTotalDespesasAnoAtual() {
+        try {
+            User currentUser = getCurrentUser();
+            BigDecimal total = despesaRepository.calcularTotalDespesasAnoAtual(currentUser);
+            return ResponseEntity.ok(total != null ? total : BigDecimal.ZERO);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular total de despesas do ano atual: " + e.getMessage());
+        }
+    }
+
     // 🆕 GET - Top 5 categorias com maior gasto DO USUÁRIO
     @GetMapping("/top-categorias")
     public ResponseEntity<?> getTopCategorias() {
