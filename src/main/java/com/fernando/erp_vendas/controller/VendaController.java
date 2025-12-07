@@ -163,6 +163,56 @@ public class VendaController {
         }
     }
 
+    // ✅ ATUALIZADO: ENDPOINTS PARA DADOS DO MÊS ATUAL
+
+    // 🆕 GET - Calcular faturamento do mês atual DO USUÁRIO
+    @GetMapping("/faturamento-mes-atual")
+    public ResponseEntity<?> getFaturamentoMesAtual() {
+        try {
+            User currentUser = getCurrentUser();
+            Double faturamento = vendaRepository.calcularFaturamentoMesAtual(currentUser);
+            return ResponseEntity.ok(faturamento != null ? faturamento : 0.0);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular faturamento do mês atual: " + e.getMessage());
+        }
+    }
+
+    // 🆕 GET - Calcular custo efetivo do mês atual DO USUÁRIO
+    @GetMapping("/custo-efetivo-mes-atual")
+    public ResponseEntity<?> getCustoEfetivoMesAtual() {
+        try {
+            User currentUser = getCurrentUser();
+            Double custoEfetivo = vendaRepository.calcularCustoEfetivoMesAtual(currentUser);
+            return ResponseEntity.ok(custoEfetivo != null ? custoEfetivo : 0.0);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular custo efetivo do mês atual: " + e.getMessage());
+        }
+    }
+
+    // 🆕 GET - Calcular lucro bruto do mês atual DO USUÁRIO
+    @GetMapping("/lucro-bruto-mes-atual")
+    public ResponseEntity<?> getLucroBrutoMesAtual() {
+        try {
+            User currentUser = getCurrentUser();
+            Double lucroBruto = vendaRepository.calcularLucroBrutoMesAtual(currentUser);
+            return ResponseEntity.ok(lucroBruto != null ? lucroBruto : 0.0);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular lucro bruto do mês atual: " + e.getMessage());
+        }
+    }
+
+    // 🆕 GET - Calcular lucro líquido do mês atual DO USUÁRIO
+    @GetMapping("/lucro-liquido-mes-atual")
+    public ResponseEntity<?> getLucroLiquidoMesAtual() {
+        try {
+            User currentUser = getCurrentUser();
+            Double lucroLiquido = vendaRepository.calcularLucroLiquidoMesAtual(currentUser);
+            return ResponseEntity.ok(lucroLiquido != null ? lucroLiquido : 0.0);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular lucro líquido do mês atual: " + e.getMessage());
+        }
+    }
+
     // GET - Listar vendas por dia DO USUÁRIO
     @GetMapping("/vendas-por-dia")
     public ResponseEntity<?> getVendasPorDia() {

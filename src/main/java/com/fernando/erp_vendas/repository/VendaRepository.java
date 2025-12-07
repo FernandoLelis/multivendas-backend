@@ -88,6 +88,22 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
             "FROM Venda v WHERE v.user = :user AND (v.custoProdutoVendido + v.custoEnvio) > 0")
     Double findRoiMedio(@Param("user") User user);
 
+    // 🆕 Calcular faturamento do mês atual DO USUÁRIO
+    @Query("SELECT SUM(v.precoVenda * v.quantidade + v.fretePagoPeloCliente) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
+    Double calcularFaturamentoMesAtual(@Param("user") User user);
+
+    // 🆕 Calcular custo efetivo do mês atual DO USUÁRIO
+    @Query("SELECT SUM(v.custoProdutoVendido + v.custoEnvio + v.tarifaPlataforma) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
+    Double calcularCustoEfetivoMesAtual(@Param("user") User user);
+
+    // 🆕 Calcular lucro bruto do mês atual DO USUÁRIO
+    @Query("SELECT SUM(v.precoVenda * v.quantidade + v.fretePagoPeloCliente - v.tarifaPlataforma) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
+    Double calcularLucroBrutoMesAtual(@Param("user") User user);
+
+    // 🆕 Calcular lucro líquido do mês atual DO USUÁRIO
+    @Query("SELECT SUM(v.precoVenda * v.quantidade + v.fretePagoPeloCliente - v.tarifaPlataforma - v.custoProdutoVendido - v.custoEnvio - v.despesasOperacionais) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
+    Double calcularLucroLiquidoMesAtual(@Param("user") User user);
+
     // ✅ MÉTODOS LEGACY (MANTIDOS PARA COMPATIBILIDADE - USAR COM CAUTELA)
 
     // @deprecated - Use findByPlataformaAndUser em vez disso
