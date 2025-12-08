@@ -62,46 +62,62 @@ public class VendaDTO {
         this.custoProdutoVendido = venda.getCustoProdutoVendido() != null ? venda.getCustoProdutoVendido() : 0.0;
         this.despesasOperacionais = venda.getDespesasOperacionais() != null ? venda.getDespesasOperacionais() : 0.0;
 
-        // ✅ CORREÇÃO: Calcular e incluir os campos financeiros
-        this.faturamento = calcularFaturamento();
-        this.custoEfetivoTotal = calcularCustoEfetivoTotal();
-        this.lucroBruto = calcularLucroBruto();
-        this.lucroLiquido = calcularLucroLiquido();
-        this.roi = calcularROI();
+        // ✅ CORREÇÃO CRÍTICA: Usar métodos da entidade para cálculos consistentes
+        this.faturamento = venda.calcularFaturamento(); // Usa método CORRETO da entidade
+        this.custoEfetivoTotal = venda.calcularCustoEfetivoTotal();
+        this.lucroBruto = venda.calcularLucroBruto();
+        this.lucroLiquido = venda.calcularLucroLiquido();
+        this.roi = venda.calcularROI();
 
-        System.out.println("✅ VendaDTO criado - ID: " + this.id +
-                ", Data: " + this.data +
-                ", ProdutoId: " + this.produtoId +
-                ", Produto: " + this.produtoNome);
+        // DEBUG: Verificar cálculo
+        System.out.println("✅ VendaDTO - Cálculos:");
+        System.out.println("  Preço Venda: " + this.precoVenda);
+        System.out.println("  Quantidade: " + this.quantidade);
+        System.out.println("  Frete: " + this.fretePagoPeloCliente);
+        System.out.println("  Faturamento Calculado: " + this.faturamento);
+        System.out.println("  Faturamento Esperado: " + (this.precoVenda * this.quantidade + this.fretePagoPeloCliente));
     }
 
-    // ✅ MÉTODOS DE CÁLCULO
+    // ⚠️ ATENÇÃO: Remover métodos de cálculo locais - usar apenas da entidade
+    // Os métodos abaixo NÃO DEVEM SER USADOS - mantidos apenas para compatibilidade
+
+    @Deprecated
     private Double calcularFaturamento() {
+        // ⚠️ MÉTODO DEPRECIADO - Usar venda.calcularFaturamento() em vez disso
         Double precoVendaSafe = this.precoVenda != null ? this.precoVenda : 0.0;
         Double fretePagoSafe = this.fretePagoPeloCliente != null ? this.fretePagoPeloCliente : 0.0;
-        return precoVendaSafe + fretePagoSafe;
+        Integer quantidadeSafe = this.quantidade != null ? this.quantidade : 1;
+        return (precoVendaSafe * quantidadeSafe) + fretePagoSafe; // ✅ CORRIGIDO
     }
 
+    @Deprecated
     private Double calcularCustoEfetivoTotal() {
+        // ⚠️ MÉTODO DEPRECIADO
         Double custoProdutoSafe = this.custoProdutoVendido != null ? this.custoProdutoVendido : 0.0;
         Double custoEnvioSafe = this.custoEnvio != null ? this.custoEnvio : 0.0;
         Double tarifaSafe = this.tarifaPlataforma != null ? this.tarifaPlataforma : 0.0;
         return custoProdutoSafe + custoEnvioSafe + tarifaSafe;
     }
 
+    @Deprecated
     private Double calcularLucroBruto() {
+        // ⚠️ MÉTODO DEPRECIADO
         Double faturamentoSafe = this.faturamento != null ? this.faturamento : 0.0;
         Double custoEfetivoSafe = this.custoEfetivoTotal != null ? this.custoEfetivoTotal : 0.0;
         return faturamentoSafe - custoEfetivoSafe;
     }
 
+    @Deprecated
     private Double calcularLucroLiquido() {
+        // ⚠️ MÉTODO DEPRECIADO
         Double lucroBrutoSafe = this.lucroBruto != null ? this.lucroBruto : 0.0;
         Double despesasSafe = this.despesasOperacionais != null ? this.despesasOperacionais : 0.0;
         return lucroBrutoSafe - despesasSafe;
     }
 
+    @Deprecated
     private Double calcularROI() {
+        // ⚠️ MÉTODO DEPRECIADO
         Double custoEfetivoSafe = this.custoEfetivoTotal != null ? this.custoEfetivoTotal : 0.0;
         Double lucroLiquidoSafe = this.lucroLiquido != null ? this.lucroLiquido : 0.0;
 
@@ -118,7 +134,6 @@ public class VendaDTO {
     public String getPlataforma() { return plataforma; }
     public Integer getQuantidade() { return quantidade; }
 
-    // ✅ CORREÇÃO: Getters para os novos campos
     public Long getProdutoId() { return produtoId != null ? produtoId : 0L; }
     public String getProdutoNome() { return produtoNome != null ? produtoNome : ""; }
     public String getProdutoSku() { return produtoSku != null ? produtoSku : ""; }
@@ -130,14 +145,14 @@ public class VendaDTO {
     public Double getCustoProdutoVendido() { return custoProdutoVendido != null ? custoProdutoVendido : 0.0; }
     public Double getDespesasOperacionais() { return despesasOperacionais != null ? despesasOperacionais : 0.0; }
 
-    // ✅ CORREÇÃO: Getters para campos de cálculo
+    // ✅ Getters para campos de cálculo
     public Double getFaturamento() { return faturamento != null ? faturamento : 0.0; }
     public Double getCustoEfetivoTotal() { return custoEfetivoTotal != null ? custoEfetivoTotal : 0.0; }
     public Double getLucroBruto() { return lucroBruto != null ? lucroBruto : 0.0; }
     public Double getLucroLiquido() { return lucroLiquido != null ? lucroLiquido : 0.0; }
     public Double getRoi() { return roi != null ? roi : 0.0; }
 
-    // SETTERS (opcionais, mas úteis para testes)
+    // SETTERS
     public void setId(Long id) { this.id = id; }
     public void setData(LocalDateTime data) { this.data = data; }
     public void setIdPedido(String idPedido) { this.idPedido = idPedido; }
