@@ -78,8 +78,8 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     @Query("SELECT SUM(v.custoProdutoVendido + v.custoEnvio) FROM Venda v WHERE v.user = :user")
     Double findCustoEfetivoTotal(@Param("user") User user);
 
-    // Lucro Bruto Total de todas as vendas DO USUÁRIO
-    @Query("SELECT SUM(v.precoVenda + v.fretePagoPeloCliente - v.tarifaPlataforma) FROM Venda v WHERE v.user = :user")
+    // ✅ CORRIGIDO: Lucro Bruto Total de todas as vendas DO USUÁRIO
+    @Query("SELECT SUM(v.precoVenda + v.fretePagoPeloCliente - v.custoProdutoVendido - v.custoEnvio - v.tarifaPlataforma) FROM Venda v WHERE v.user = :user")
     Double findLucroBrutoTotal(@Param("user") User user);
 
     // 🆕 Consultar faturamento mensal DO USUÁRIO
@@ -100,8 +100,8 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     @Query("SELECT SUM(v.custoProdutoVendido + v.custoEnvio + v.tarifaPlataforma) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
     Double calcularCustoEfetivoMesAtual(@Param("user") User user);
 
-    // 🆕 Calcular lucro bruto do mês atual DO USUÁRIO
-    @Query("SELECT SUM(v.precoVenda * v.quantidade + v.fretePagoPeloCliente - v.tarifaPlataforma) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
+    // ✅ CORRIGIDO: Calcular lucro bruto do mês atual DO USUÁRIO
+    @Query("SELECT SUM(v.precoVenda * v.quantidade + v.fretePagoPeloCliente - v.custoProdutoVendido - v.custoEnvio - v.tarifaPlataforma) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
     Double calcularLucroBrutoMesAtual(@Param("user") User user);
 
     // 🆕 Calcular lucro líquido do mês atual DO USUÁRIO

@@ -121,18 +121,19 @@ public class Venda {
     public List<ItemVenda> getItens() { return itens; }
     public void setItens(List<ItemVenda> itens) { this.itens = itens; }
 
-    // ✅ CORREÇÃO CRÍTICA: NOVAS FÓRMULAS COM TRATAMENTO DE NULL
+    // ✅ CORREÇÃO CRÍTICA: FÓRMULAS CORRIGIDAS COM TRATAMENTO DE NULL
 
-    // 💰 FATURAMENTO = Preço Venda + Frete
+    // 💰 FATURAMENTO = (Preço Venda × Quantidade) + Frete
     public Double calcularFaturamento() {
-        double preco = getPrecoVenda();
+        double precoTotal = getPrecoVenda() * getQuantidade();
         double frete = getFretePagoPeloCliente();
-        return preco + frete;
+        return precoTotal + frete;
     }
 
-    // 💸 CUSTO EFETIVO = Custo PEPS + Custo Envio + Tarifa
+    // 💸 CUSTO EFETIVO = Custo PEPS (TOTAL) + Custo Envio + Tarifa
+    // custoProdutoVendido JÁ É TOTAL (calculado pelo PEPS × quantidade)
     public Double calcularCustoEfetivoTotal() {
-        double custoProduto = getCustoProdutoVendido();
+        double custoProduto = getCustoProdutoVendido(); // Já é total (PEPS × quantidade)
         double custoEnvioVal = getCustoEnvio();
         double tarifa = getTarifaPlataforma();
         return custoProduto + custoEnvioVal + tarifa;
