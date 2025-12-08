@@ -19,7 +19,7 @@ public class VendaDTO {
     private String produtoNome;
     private String produtoSku;
 
-    private Double precoVenda;
+    private Double precoVenda; // ⚠️ AGORA: Preço TOTAL da venda
     private Double fretePagoPeloCliente;
     private Double custoEnvio;
     private Double tarifaPlataforma;
@@ -62,8 +62,8 @@ public class VendaDTO {
         this.custoProdutoVendido = venda.getCustoProdutoVendido() != null ? venda.getCustoProdutoVendido() : 0.0;
         this.despesasOperacionais = venda.getDespesasOperacionais() != null ? venda.getDespesasOperacionais() : 0.0;
 
-        // ✅ CORREÇÃO CRÍTICA: Usar métodos da entidade para cálculos consistentes
-        this.faturamento = venda.calcularFaturamento(); // Usa método CORRETO da entidade
+        // ✅ CORREÇÃO: Usar métodos da entidade para cálculos consistentes
+        this.faturamento = venda.calcularFaturamento(); // ⚠️ Já usa preço TOTAL (não multiplica)
         this.custoEfetivoTotal = venda.calcularCustoEfetivoTotal();
         this.lucroBruto = venda.calcularLucroBruto();
         this.lucroLiquido = venda.calcularLucroLiquido();
@@ -71,23 +71,22 @@ public class VendaDTO {
 
         // DEBUG: Verificar cálculo
         System.out.println("✅ VendaDTO - Cálculos:");
-        System.out.println("  Preço Venda: " + this.precoVenda);
+        System.out.println("  Preço Venda (TOTAL): " + this.precoVenda);
         System.out.println("  Quantidade: " + this.quantidade);
         System.out.println("  Frete: " + this.fretePagoPeloCliente);
         System.out.println("  Faturamento Calculado: " + this.faturamento);
-        System.out.println("  Faturamento Esperado: " + (this.precoVenda * this.quantidade + this.fretePagoPeloCliente));
     }
 
-    // ⚠️ ATENÇÃO: Remover métodos de cálculo locais - usar apenas da entidade
+    // ⚠️ ATENÇÃO: Métodos de cálculo locais - usar apenas da entidade
     // Os métodos abaixo NÃO DEVEM SER USADOS - mantidos apenas para compatibilidade
 
     @Deprecated
     private Double calcularFaturamento() {
         // ⚠️ MÉTODO DEPRECIADO - Usar venda.calcularFaturamento() em vez disso
+        // ⚠️ NÃO multiplicar por quantidade - precoVenda já é TOTAL
         Double precoVendaSafe = this.precoVenda != null ? this.precoVenda : 0.0;
         Double fretePagoSafe = this.fretePagoPeloCliente != null ? this.fretePagoPeloCliente : 0.0;
-        Integer quantidadeSafe = this.quantidade != null ? this.quantidade : 1;
-        return (precoVendaSafe * quantidadeSafe) + fretePagoSafe; // ✅ CORRIGIDO
+        return precoVendaSafe + fretePagoSafe; // ✅ CORRETO: Não multiplica
     }
 
     @Deprecated

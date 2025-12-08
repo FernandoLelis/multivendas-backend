@@ -31,7 +31,7 @@ public class Venda {
 
     // Preços e custos
     @Column(name = "preco_venda")
-    private Double precoVenda = 0.0;
+    private Double precoVenda = 0.0; // ⚠️ AGORA: PREÇO TOTAL da venda (não unitário)
 
     @Column(name = "frete_pago_pelo_cliente")
     private Double fretePagoPeloCliente = 0.0;
@@ -43,7 +43,7 @@ public class Venda {
     private Double tarifaPlataforma = 0.0;
 
     @Column(name = "custo_produto_vendido")
-    private Double custoProdutoVendido = 0.0;
+    private Double custoProdutoVendido = 0.0; // ✅ Já é TOTAL (PEPS × quantidade)
 
     @Column(name = "despesas_operacionais")
     private Double despesasOperacionais = 0.0;
@@ -121,11 +121,12 @@ public class Venda {
     public List<ItemVenda> getItens() { return itens; }
     public void setItens(List<ItemVenda> itens) { this.itens = itens; }
 
-    // ✅ CORREÇÃO CRÍTICA: FÓRMULAS CORRIGIDAS COM TRATAMENTO DE NULL
+    // ✅ CORREÇÃO: FÓRMULAS ATUALIZADAS - precoVenda já é TOTAL (não multiplicar)
 
-    // 💰 FATURAMENTO = (Preço Venda × Quantidade) + Frete
+    // 💰 FATURAMENTO = Preço Total da Venda + Frete
+    // ⚠️ NÃO multiplicar por quantidade - precoVenda já é TOTAL
     public Double calcularFaturamento() {
-        double precoTotal = getPrecoVenda() * getQuantidade();
+        double precoTotal = getPrecoVenda(); // ✅ Já é total, não multiplicar
         double frete = getFretePagoPeloCliente();
         return precoTotal + frete;
     }
@@ -133,7 +134,7 @@ public class Venda {
     // 💸 CUSTO EFETIVO = Custo PEPS (TOTAL) + Custo Envio + Tarifa
     // custoProdutoVendido JÁ É TOTAL (calculado pelo PEPS × quantidade)
     public Double calcularCustoEfetivoTotal() {
-        double custoProduto = getCustoProdutoVendido(); // Já é total (PEPS × quantidade)
+        double custoProduto = getCustoProdutoVendido(); // Já é total
         double custoEnvioVal = getCustoEnvio();
         double tarifa = getTarifaPlataforma();
         return custoProduto + custoEnvioVal + tarifa;
