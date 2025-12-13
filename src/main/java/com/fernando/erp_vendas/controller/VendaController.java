@@ -218,11 +218,12 @@ public class VendaController {
     public ResponseEntity<?> getQuantidadeVendas() {
         try {
             User currentUser = getCurrentUser();
+            Long userId = currentUser.getId(); // 🆕 PEGAR O ID DO USUÁRIO PARA NATIVE QUERIES
 
-            // Buscar quantidades usando os novos métodos do repository
-            Long vendasMesAtual = vendaRepository.countVendasMesAtual(currentUser);
-            Long vendasMesAnterior = vendaRepository.countVendasMesAnterior(currentUser);
-            Long vendasAnoAtual = vendaRepository.countVendasAnoAtual(currentUser);
+            // Buscar quantidades usando os novos métodos do repository (agora com userId)
+            Long vendasMesAtual = vendaRepository.countVendasMesAtual(userId);
+            Long vendasMesAnterior = vendaRepository.countVendasMesAnterior(userId);
+            Long vendasAnoAtual = vendaRepository.countVendasAnoAtual(userId);
 
             // Calcular variação percentual
             double variacao = 0.0;

@@ -111,19 +111,27 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     @Query("SELECT SUM(v.precoVenda + v.fretePagoPeloCliente - v.tarifaPlataforma - v.custoProdutoVendido - v.custoEnvio - v.despesasOperacionais) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
     Double calcularLucroLiquidoMesAtual(@Param("user") User user);
 
-    // 🆕 MÉTODOS PARA QUANTIDADE DE VENDAS - MULTI-TENANCY
+    // 🆕 MÉTODOS PARA QUANTIDADE DE VENDAS - MULTI-TENANCY (CORRIGIDOS PARA POSTGRESQL)
 
-    // Contar vendas do mês atual DO USUÁRIO
-    @Query("SELECT COUNT(v) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
-    Long countVendasMesAtual(@Param("user") User user);
+    // Contar vendas do mês atual DO USUÁRIO (PostgreSQL)
+    @Query(value = "SELECT COUNT(*) FROM venda v WHERE v.user_id = :userId " +
+            "AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE) " +
+            "AND EXTRACT(MONTH FROM v.data) = EXTRACT(MONTH FROM CURRENT_DATE)",
+            nativeQuery = true)
+    Long countVendasMesAtual(@Param("userId") Long userId);
 
-    // Contar vendas do mês anterior DO USUÁRIO
-    @Query("SELECT COUNT(v) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE - INTERVAL 1 MONTH) AND MONTH(v.data) = MONTH(CURRENT_DATE - INTERVAL 1 MONTH)")
-    Long countVendasMesAnterior(@Param("user") User user);
+    // Contar vendas do mês anterior DO USUÁRIO (PostgreSQL - CORRIGIDO)
+    @Query(value = "SELECT COUNT(*) FROM venda v WHERE v.user_id = :userId " +
+            "AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month') " +
+            "AND EXTRACT(MONTH FROM v.data) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month')",
+            nativeQuery = true)
+    Long countVendasMesAnterior(@Param("userId") Long userId);
 
-    // Contar vendas do ano atual DO USUÁRIO
-    @Query("SELECT COUNT(v) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE)")
-    Long countVendasAnoAtual(@Param("user") User user);
+    // Contar vendas do ano atual DO USUÁRIO (PostgreSQL)
+    @Query(value = "SELECT COUNT(*) FROM venda v WHERE v.user_id = :userId " +
+            "AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE)",
+            nativeQuery = true)
+    Long countVendasAnoAtual(@Param("userId") Long userId);
 
     // ✅ MÉTODOS LEGACY (MANTIDOS PARA COMPATIBILIDADE - USAR COM CAUTELA)
 
