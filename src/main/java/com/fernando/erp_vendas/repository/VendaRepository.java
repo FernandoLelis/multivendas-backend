@@ -111,6 +111,20 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     @Query("SELECT SUM(v.precoVenda + v.fretePagoPeloCliente - v.tarifaPlataforma - v.custoProdutoVendido - v.custoEnvio - v.despesasOperacionais) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
     Double calcularLucroLiquidoMesAtual(@Param("user") User user);
 
+    // 🆕 MÉTODOS PARA QUANTIDADE DE VENDAS - MULTI-TENANCY
+
+    // Contar vendas do mês atual DO USUÁRIO
+    @Query("SELECT COUNT(v) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
+    Long countVendasMesAtual(@Param("user") User user);
+
+    // Contar vendas do mês anterior DO USUÁRIO
+    @Query("SELECT COUNT(v) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE - INTERVAL 1 MONTH) AND MONTH(v.data) = MONTH(CURRENT_DATE - INTERVAL 1 MONTH)")
+    Long countVendasMesAnterior(@Param("user") User user);
+
+    // Contar vendas do ano atual DO USUÁRIO
+    @Query("SELECT COUNT(v) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE)")
+    Long countVendasAnoAtual(@Param("user") User user);
+
     // ✅ MÉTODOS LEGACY (MANTIDOS PARA COMPATIBILIDADE - USAR COM CAUTELA)
 
     // @deprecated - Use findByPlataformaAndUser em vez disso

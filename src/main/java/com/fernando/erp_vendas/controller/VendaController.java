@@ -213,6 +213,43 @@ public class VendaController {
         }
     }
 
+    // 🆕 GET - Quantidade de vendas (mês atual, ano atual e variação vs mês anterior) DO USUÁRIO
+    @GetMapping("/quantidade-vendas")
+    public ResponseEntity<?> getQuantidadeVendas() {
+        try {
+            User currentUser = getCurrentUser();
+
+            // Buscar quantidades usando os novos métodos do repository
+            Long vendasMesAtual = vendaRepository.countVendasMesAtual(currentUser);
+            Long vendasMesAnterior = vendaRepository.countVendasMesAnterior(currentUser);
+            Long vendasAnoAtual = vendaRepository.countVendasAnoAtual(currentUser);
+
+            // Calcular variação percentual
+            double variacao = 0.0;
+            if (vendasMesAnterior != null && vendasMesAnterior > 0) {
+                variacao = ((vendasMesAtual.doubleValue() - vendasMesAnterior.doubleValue())
+                        / vendasMesAnterior.doubleValue()) * 100;
+            }
+
+            // Preparar resposta
+            Map<String, Object> response = new HashMap<>();
+            response.put("mesAtual", vendasMesAtual != null ? vendasMesAtual : 0);
+            response.put("anoAtual", vendasAnoAtual != null ? vendasAnoAtual : 0);
+            response.put("variacao", variacao);
+
+            System.out.println("📊 Quantidade de vendas - Mês: " + vendasMesAtual +
+                    ", Ano: " + vendasAnoAtual +
+                    ", Variação: " + variacao + "%");
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            System.out.println("❌ Erro ao buscar quantidade de vendas: " + e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body("Erro ao buscar quantidade de vendas: " + e.getMessage());
+        }
+    }
+
     // ✅ ATUALIZADO: GET - Listar vendas por dia DO USUÁRIO COM FILTRO
     @GetMapping("/vendas-por-dia")
     public ResponseEntity<?> getVendasPorDia(
