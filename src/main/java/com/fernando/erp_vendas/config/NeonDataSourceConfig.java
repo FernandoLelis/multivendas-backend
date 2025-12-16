@@ -23,10 +23,10 @@ public class NeonDataSourceConfig {
         dataSource.setPassword("npg_4XBPYDqJaE7S");
         dataSource.setDriverClassName("org.postgresql.Driver");
 
-        // Parâmetros SSL para Neon
+        // ✅ Parâmetros SSL para Neon (CORRIGIDO)
         dataSource.addDataSourceProperty("sslmode", "require");
         dataSource.addDataSourceProperty("ssl", "true");
-        dataSource.addDataSourceProperty("sslfactory", "org.postgresql.ssl.DefaultSSLFactory");
+        // ❌ REMOVIDO: dataSource.addDataSourceProperty("sslfactory", "org.postgresql.ssl.DefaultSSLFactory");
 
         // Otimizações para serverless
         dataSource.setMaximumPoolSize(5);
