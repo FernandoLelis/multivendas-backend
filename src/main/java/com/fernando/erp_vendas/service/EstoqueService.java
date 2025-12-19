@@ -53,83 +53,140 @@ public class EstoqueService {
         return lotesComSaldo.get(0);
     }
 
-    // ✅ CORRIGIDO: Calcula o custo total E registra os itens da venda COM MULTI-TENANCY
+    // ✅✅✅ CORRIGIDO COMPLETAMENTE: Calcula o custo total E registra os itens da venda COM MULTI-TENANCY E MÚLTIPLOS PRODUTOS
     @Transactional
     public BigDecimal calcularCustoVendaERegistrarItens(Venda venda) {
         User currentUser = getCurrentUser();
 
-        // 🆕 VERIFICAR SE O PRODUTO PERTENCE AO USUÁRIO
-        if (!venda.getProduto().getUser().getId().equals(currentUser.getId())) {
-            throw new RuntimeException("Produto não pertence ao usuário logado");
-        }
-
-        // 1️⃣ PRIMEIRO: Salvar a Venda para gerar ID
+        // ✅ 1️⃣ PRIMEIRO: Salvar a Venda para gerar ID
         Venda vendaSalva = vendaRepository.save(venda);
 
-        BigDecimal custoTotal = BigDecimal.ZERO;
-        Integer quantidadeRestante = venda.getQuantidade();
-        Produto produto = venda.getProduto();
+        BigDecimal custoTotalVenda = BigDecimal.ZERO;
+        List<ItemVenda> todosItensVenda = new ArrayList<>();
 
-        List<EntradaEstoque> lotesComSaldo = entradaEstoqueRepository
-                .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAsc(produto, currentUser, 0);
-
-        List<ItemVenda> itensVenda = new ArrayList<>();
-
-        for (EntradaEstoque lote : lotesComSaldo) {
-            if (quantidadeRestante <= 0) break;
-
-            Integer quantidadeUsada = Math.min(quantidadeRestante, lote.getSaldo());
-            BigDecimal custoLote = lote.getCustoUnitario().multiply(BigDecimal.valueOf(quantidadeUsada));
-
-            // ✅ CORRIGIDO: Usar vendaSalva (já persistida) em vez de venda (transient)
-            // 🆕 ADICIONAR USUÁRIO AO ITEM VENDA
-            ItemVenda itemVenda = new ItemVenda(vendaSalva, lote, quantidadeUsada, lote.getCustoUnitario(), currentUser);
-            itensVenda.add(itemVenda);
-
-            // Baixar estoque do lote
-            lote.setSaldo(lote.getSaldo() - quantidadeUsada);
-            entradaEstoqueRepository.save(lote);
-
-            custoTotal = custoTotal.add(custoLote);
-            quantidadeRestante -= quantidadeUsada;
+        // ✅ 2️⃣ VERIFICAR SE HÁ ITENS NA VENDA
+        if (venda.getItens() == null || venda.getItens().isEmpty()) {
+            throw new RuntimeException("Venda não contém produtos. Adicione ao menos um produto.");
         }
 
-        if (quantidadeRestante > 0) {
-            throw new RuntimeException("Estoque insuficiente para o produto: " + produto.getNome());
+        // ✅ 3️⃣ PROCESSAR CADA PRODUTO DA VENDA
+        for (ItemVenda itemVenda : venda.getItens()) {
+            // Validar item
+            if (itemVenda.getLote() == null || itemVenda.getLote().getProduto() == null) {
+                throw new RuntimeException("Item de venda sem lote ou produto associado");
+            }
+
+            Produto produto = itemVenda.getLote().getProduto();
+            Integer quantidadeItem = itemVenda.getQuantidade();
+
+            // 🆕 VERIFICAR SE O PRODUTO PERTENCE AO USUÁRIO
+            if (!produto.getUser().getId().equals(currentUser.getId())) {
+                throw new RuntimeException("Produto não pertence ao usuário logado: " + produto.getNome());
+            }
+
+            // ✅ 4️⃣ BUSCAR LOTES DISPONÍVEIS PARA ESTE PRODUTO (PEPS)
+            List<EntradaEstoque> lotesComSaldo = entradaEstoqueRepository
+                    .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAsc(produto, currentUser, 0);
+
+            if (lotesComSaldo.isEmpty()) {
+                throw new RuntimeException("Produto sem estoque: " + produto.getNome());
+            }
+
+            BigDecimal custoTotalItem = BigDecimal.ZERO;
+            Integer quantidadeRestante = quantidadeItem;
+            List<ItemVenda> itensParaEsteProduto = new ArrayList<>();
+
+            // ✅ 5️⃣ APLICAR PEPS: USAR LOTES MAIS ANTIGOS PRIMEIRO
+            for (EntradaEstoque lote : lotesComSaldo) {
+                if (quantidadeRestante <= 0) break;
+
+                Integer quantidadeUsada = Math.min(quantidadeRestante, lote.getSaldo());
+                BigDecimal custoLote = lote.getCustoUnitario().multiply(BigDecimal.valueOf(quantidadeUsada));
+
+                // ✅ CORRIGIDO: Criar novo ItemVenda para este lote
+                // 🆕 ADICIONAR USUÁRIO AO ITEM VENDA
+                ItemVenda novoItem = new ItemVenda(
+                        vendaSalva,           // Venda já persistida
+                        lote,                 // Lote específico usado
+                        quantidadeUsada,      // Quantidade deste lote
+                        lote.getCustoUnitario(), // Custo unitário do lote
+                        currentUser           // Usuário logado
+                );
+
+                itensParaEsteProduto.add(novoItem);
+
+                // ✅ 6️⃣ BAIXAR ESTOQUE DO LOTE
+                lote.setSaldo(lote.getSaldo() - quantidadeUsada);
+                entradaEstoqueRepository.save(lote);
+
+                custoTotalItem = custoTotalItem.add(custoLote);
+                quantidadeRestante -= quantidadeUsada;
+            }
+
+            if (quantidadeRestante > 0) {
+                throw new RuntimeException("Estoque insuficiente para o produto: " + produto.getNome() +
+                        ". Faltam: " + quantidadeRestante + " unidades");
+            }
+
+            // ✅ 7️⃣ ADICIONAR CUSTO DO ITEM AO TOTAL DA VENDA
+            custoTotalVenda = custoTotalVenda.add(custoTotalItem);
+            todosItensVenda.addAll(itensParaEsteProduto);
+
+            System.out.println("✅ Produto processado: " + produto.getNome() +
+                    ", Quantidade: " + quantidadeItem +
+                    ", Custo Total: " + custoTotalItem);
         }
 
-        // ✅ SALVAR todos os itens da venda
-        itemVendaRepository.saveAll(itensVenda);
+        // ✅ 8️⃣ SALVAR TODOS OS ITENS DA VENDA
+        itemVendaRepository.saveAll(todosItensVenda);
 
-        // ✅ CORRIGIDO: Converter BigDecimal para double
-        vendaSalva.setCustoProdutoVendido(custoTotal.doubleValue());
+        // ✅ 9️⃣ ATUALIZAR CUSTO TOTAL DA VENDA
+        vendaSalva.setCustoProdutoVendido(custoTotalVenda.doubleValue());
         vendaRepository.save(vendaSalva);
 
-        return custoTotal;
+        System.out.println("✅ Venda processada: " + vendaSalva.getIdPedido() +
+                ", Total produtos: " + venda.getItens().size() +
+                ", Custo total: " + custoTotalVenda);
+
+        return custoTotalVenda;
     }
 
-    // ✅ ATUALIZADO: Baixa estoque usando PEPS E rastreia os itens COM MULTI-TENANCY
+    // ✅ ATUALIZADO: Baixa estoque usando PEPS E rastreia os itens COM MULTI-TENANCY (para múltiplos produtos)
     @Transactional
     public void baixarEstoque(Venda venda) {
         User currentUser = getCurrentUser();
-        Integer quantidadeRestante = venda.getQuantidade();
-        Produto produto = venda.getProduto();
 
-        List<EntradaEstoque> lotesComSaldo = entradaEstoqueRepository
-                .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAsc(produto, currentUser, 0);
-
-        for (EntradaEstoque lote : lotesComSaldo) {
-            if (quantidadeRestante <= 0) break;
-
-            Integer quantidadeBaixa = Math.min(quantidadeRestante, lote.getSaldo());
-            lote.setSaldo(lote.getSaldo() - quantidadeBaixa);
-            entradaEstoqueRepository.save(lote);
-
-            quantidadeRestante -= quantidadeBaixa;
+        // ✅ VERIFICAR SE HÁ ITENS NA VENDA
+        if (venda.getItens() == null || venda.getItens().isEmpty()) {
+            throw new RuntimeException("Venda não contém produtos para baixar estoque.");
         }
 
-        if (quantidadeRestante > 0) {
-            throw new RuntimeException("Erro ao baixar estoque. Estoque insuficiente.");
+        // ✅ PROCESSAR CADA ITEM DA VENDA
+        for (ItemVenda item : venda.getItens()) {
+            Produto produto = item.getLote().getProduto();
+            Integer quantidadeItem = item.getQuantidade();
+            Integer quantidadeRestante = quantidadeItem;
+
+            List<EntradaEstoque> lotesComSaldo = entradaEstoqueRepository
+                    .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAsc(produto, currentUser, 0);
+
+            for (EntradaEstoque lote : lotesComSaldo) {
+                if (quantidadeRestante <= 0) break;
+
+                Integer quantidadeBaixa = Math.min(quantidadeRestante, lote.getSaldo());
+                lote.setSaldo(lote.getSaldo() - quantidadeBaixa);
+                entradaEstoqueRepository.save(lote);
+
+                quantidadeRestante -= quantidadeBaixa;
+            }
+
+            if (quantidadeRestante > 0) {
+                throw new RuntimeException("Erro ao baixar estoque para produto: " + produto.getNome() +
+                        ". Estoque insuficiente.");
+            }
+
+            System.out.println("✅ Estoque baixado: " + quantidadeItem +
+                    " unidades do produto " + produto.getNome());
         }
     }
 
@@ -162,7 +219,8 @@ public class EstoqueService {
 
             System.out.println("✅ Estoque revertido: " + quantidadeReverter +
                     " unidades devolvidas ao lote " + lote.getId() +
-                    " (Custo: " + item.getCustoUnitario() + ")");
+                    " (Produto: " + lote.getProduto().getNome() +
+                    ", Custo: " + item.getCustoUnitario() + ")");
         }
 
         // ✅ NOVO: Excluir os itens da venda após reverter estoque
@@ -253,5 +311,26 @@ public class EstoqueService {
         System.out.println("📦 Total de entradas encontradas: " + entradas.size());
 
         return saldoManual;
+    }
+
+    // ✅ NOVO: Verifica estoque para múltiplos produtos
+    public void verificarEstoqueParaVenda(List<ItemVenda> itens) {
+        User currentUser = getCurrentUser();
+
+        for (ItemVenda item : itens) {
+            Produto produto = item.getLote().getProduto();
+            Integer quantidadeNecessaria = item.getQuantidade();
+
+            Integer saldoDisponivel = verificarSaldoTotal(produto);
+
+            if (saldoDisponivel < quantidadeNecessaria) {
+                throw new RuntimeException("Estoque insuficiente para produto: " + produto.getNome() +
+                        ". Necessário: " + quantidadeNecessaria +
+                        ", Disponível: " + saldoDisponivel);
+            }
+
+            System.out.println("✅ Estoque OK para produto: " + produto.getNome() +
+                    " (" + quantidadeNecessaria + "/" + saldoDisponivel + ")");
+        }
     }
 }

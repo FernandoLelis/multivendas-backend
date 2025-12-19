@@ -3,6 +3,10 @@ package com.fernando.erp_vendas.dto;
 import com.fernando.erp_vendas.model.Venda;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class VendaDTO {
     private Long id;
@@ -12,27 +16,32 @@ public class VendaDTO {
 
     private String idPedido;
     private String plataforma;
-    private Integer quantidade;
 
-    // ✅ CORREÇÃO CRÍTICA: Adicionar produtoId para o frontend poder selecionar no select
-    private Long produtoId;
-    private String produtoNome;
-    private String produtoSku;
+    // ✅ REMOVIDO: quantidade, produtoId, produtoNome, produtoSku (agora estão nos itens)
+    // private Integer quantidade;
+    // private Long produtoId;
+    // private String produtoNome;
+    // private String produtoSku;
 
-    private Double precoVenda; // ⚠️ AGORA: Preço TOTAL da venda
+    // ✅ NOVO: Lista de produtos da venda
+    private List<ItemVendaDTO> itens = new ArrayList<>();
+
+    // Preços e custos da venda (agregados de todos os itens)
+    private Double precoVenda; // ⚠️ Preço TOTAL da venda (soma de todos os produtos)
     private Double fretePagoPeloCliente;
     private Double custoEnvio;
     private Double tarifaPlataforma;
-    private Double custoProdutoVendido;
+    private Double custoProdutoVendido; // ✅ Soma dos custos de todos os itens (calculado pelo PEPS)
     private Double despesasOperacionais;
 
-    // ✅ CORREÇÃO: Adicionar campos de cálculo para o frontend
+    // Campos de cálculo para o frontend
     private Double faturamento;
     private Double custoEfetivoTotal;
     private Double lucroBruto;
     private Double lucroLiquido;
     private Double roi;
 
+    // Construtor a partir da entidade Venda
     public VendaDTO(Venda venda) {
         this.id = venda.getId();
 
@@ -41,17 +50,23 @@ public class VendaDTO {
 
         this.idPedido = venda.getIdPedido();
         this.plataforma = venda.getPlataforma();
-        this.quantidade = venda.getQuantidade();
 
-        // ✅ CORREÇÃO CRÍTICA: Incluir produtoId, produtoNome e produtoSku
-        if (venda.getProduto() != null) {
-            this.produtoId = venda.getProduto().getId();
-            this.produtoNome = venda.getProduto().getNome();
-            this.produtoSku = venda.getProduto().getSku();
-        } else {
-            this.produtoId = null;
-            this.produtoNome = "Produto não encontrado";
-            this.produtoSku = "";
+        // ✅ NOVO: Converter itens da venda para ItemVendaDTO
+        if (venda.getItens() != null && !venda.getItens().isEmpty()) {
+            this.itens = venda.getItens().stream()
+                    .map(item -> new ItemVendaDTO(
+                            item.getId(),
+                            item.getLote() != null && item.getLote().getProduto() != null
+                                    ? item.getLote().getProduto().getId() : null,
+                            item.getLote() != null && item.getLote().getProduto() != null
+                                    ? item.getLote().getProduto().getNome() : "Produto não encontrado",
+                            item.getLote() != null && item.getLote().getProduto() != null
+                                    ? item.getLote().getProduto().getSku() : "",
+                            item.getQuantidade(),
+                            item.getCustoUnitario(),
+                            item.getLote() != null ? item.getLote().getId() : null
+                    ))
+                    .collect(Collectors.toList());
         }
 
         // ✅ TRATAMENTO CRÍTICO: Garantir que nenhum campo Double seja null
@@ -63,67 +78,46 @@ public class VendaDTO {
         this.despesasOperacionais = venda.getDespesasOperacionais() != null ? venda.getDespesasOperacionais() : 0.0;
 
         // ✅ CORREÇÃO: Usar métodos da entidade para cálculos consistentes
-        this.faturamento = venda.calcularFaturamento(); // ⚠️ Já usa preço TOTAL (não multiplica)
+        this.faturamento = venda.calcularFaturamento();
         this.custoEfetivoTotal = venda.calcularCustoEfetivoTotal();
         this.lucroBruto = venda.calcularLucroBruto();
         this.lucroLiquido = venda.calcularLucroLiquido();
         this.roi = venda.calcularROI();
 
         // DEBUG: Verificar cálculo
-        System.out.println("✅ VendaDTO - Cálculos:");
+        System.out.println("✅ VendaDTO - Venda com " + this.itens.size() + " produtos:");
         System.out.println("  Preço Venda (TOTAL): " + this.precoVenda);
-        System.out.println("  Quantidade: " + this.quantidade);
-        System.out.println("  Frete: " + this.fretePagoPeloCliente);
+        System.out.println("  Quantidade Total: " + this.getQuantidadeTotal());
+        System.out.println("  Custo Produtos: " + this.custoProdutoVendido);
         System.out.println("  Faturamento Calculado: " + this.faturamento);
     }
 
-    // ⚠️ ATENÇÃO: Métodos de cálculo locais - usar apenas da entidade
-    // Os métodos abaixo NÃO DEVEM SER USADOS - mantidos apenas para compatibilidade
-
-    @Deprecated
-    private Double calcularFaturamento() {
-        // ⚠️ MÉTODO DEPRECIADO - Usar venda.calcularFaturamento() em vez disso
-        // ⚠️ NÃO multiplicar por quantidade - precoVenda já é TOTAL
-        Double precoVendaSafe = this.precoVenda != null ? this.precoVenda : 0.0;
-        Double fretePagoSafe = this.fretePagoPeloCliente != null ? this.fretePagoPeloCliente : 0.0;
-        return precoVendaSafe + fretePagoSafe; // ✅ CORRETO: Não multiplica
+    // Construtor para criação (sem id)
+    public VendaDTO() {
     }
 
-    @Deprecated
-    private Double calcularCustoEfetivoTotal() {
-        // ⚠️ MÉTODO DEPRECIADO
-        Double custoProdutoSafe = this.custoProdutoVendido != null ? this.custoProdutoVendido : 0.0;
-        Double custoEnvioSafe = this.custoEnvio != null ? this.custoEnvio : 0.0;
-        Double tarifaSafe = this.tarifaPlataforma != null ? this.tarifaPlataforma : 0.0;
-        return custoProdutoSafe + custoEnvioSafe + tarifaSafe;
+    // ✅ NOVO: Métodos auxiliares para quantidade e produtos
+
+    // Quantidade total (soma de todos os itens)
+    public Integer getQuantidadeTotal() {
+        return itens.stream()
+                .mapToInt(ItemVendaDTO::getQuantidade)
+                .sum();
     }
 
-    @Deprecated
-    private Double calcularLucroBruto() {
-        // ⚠️ MÉTODO DEPRECIADO
-        Double faturamentoSafe = this.faturamento != null ? this.faturamento : 0.0;
-        Double custoEfetivoSafe = this.custoEfetivoTotal != null ? this.custoEfetivoTotal : 0.0;
-        return faturamentoSafe - custoEfetivoSafe;
+    // Custo total dos produtos (soma de todos os itens)
+    public BigDecimal getCustoProdutosTotal() {
+        return itens.stream()
+                .map(ItemVendaDTO::getCustoTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    @Deprecated
-    private Double calcularLucroLiquido() {
-        // ⚠️ MÉTODO DEPRECIADO
-        Double lucroBrutoSafe = this.lucroBruto != null ? this.lucroBruto : 0.0;
-        Double despesasSafe = this.despesasOperacionais != null ? this.despesasOperacionais : 0.0;
-        return lucroBrutoSafe - despesasSafe;
-    }
-
-    @Deprecated
-    private Double calcularROI() {
-        // ⚠️ MÉTODO DEPRECIADO
-        Double custoEfetivoSafe = this.custoEfetivoTotal != null ? this.custoEfetivoTotal : 0.0;
-        Double lucroLiquidoSafe = this.lucroLiquido != null ? this.lucroLiquido : 0.0;
-
-        if (custoEfetivoSafe == 0.0) {
-            return 0.0;
-        }
-        return (lucroLiquidoSafe / custoEfetivoSafe) * 100;
+    // Lista de IDs de produtos únicos
+    public List<Long> getProdutosIds() {
+        return itens.stream()
+                .map(ItemVendaDTO::getProdutoId)
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     // GETTERS
@@ -131,12 +125,11 @@ public class VendaDTO {
     public LocalDateTime getData() { return data; }
     public String getIdPedido() { return idPedido; }
     public String getPlataforma() { return plataforma; }
-    public Integer getQuantidade() { return quantidade; }
 
-    public Long getProdutoId() { return produtoId != null ? produtoId : 0L; }
-    public String getProdutoNome() { return produtoNome != null ? produtoNome : ""; }
-    public String getProdutoSku() { return produtoSku != null ? produtoSku : ""; }
+    // ✅ NOVO: Getter para itens
+    public List<ItemVendaDTO> getItens() { return itens; }
 
+    // Getters para campos financeiros (com tratamento null)
     public Double getPrecoVenda() { return precoVenda != null ? precoVenda : 0.0; }
     public Double getFretePagoPeloCliente() { return fretePagoPeloCliente != null ? fretePagoPeloCliente : 0.0; }
     public Double getCustoEnvio() { return custoEnvio != null ? custoEnvio : 0.0; }
@@ -144,7 +137,7 @@ public class VendaDTO {
     public Double getCustoProdutoVendido() { return custoProdutoVendido != null ? custoProdutoVendido : 0.0; }
     public Double getDespesasOperacionais() { return despesasOperacionais != null ? despesasOperacionais : 0.0; }
 
-    // ✅ Getters para campos de cálculo
+    // Getters para campos de cálculo
     public Double getFaturamento() { return faturamento != null ? faturamento : 0.0; }
     public Double getCustoEfetivoTotal() { return custoEfetivoTotal != null ? custoEfetivoTotal : 0.0; }
     public Double getLucroBruto() { return lucroBruto != null ? lucroBruto : 0.0; }
@@ -156,14 +149,64 @@ public class VendaDTO {
     public void setData(LocalDateTime data) { this.data = data; }
     public void setIdPedido(String idPedido) { this.idPedido = idPedido; }
     public void setPlataforma(String plataforma) { this.plataforma = plataforma; }
-    public void setQuantidade(Integer quantidade) { this.quantidade = quantidade; }
-    public void setProdutoId(Long produtoId) { this.produtoId = produtoId; }
-    public void setProdutoNome(String produtoNome) { this.produtoNome = produtoNome; }
-    public void setProdutoSku(String produtoSku) { this.produtoSku = produtoSku; }
+
+    // ✅ NOVO: Setter para itens
+    public void setItens(List<ItemVendaDTO> itens) { this.itens = itens; }
+
     public void setPrecoVenda(Double precoVenda) { this.precoVenda = precoVenda; }
     public void setFretePagoPeloCliente(Double fretePagoPeloCliente) { this.fretePagoPeloCliente = fretePagoPeloCliente; }
     public void setCustoEnvio(Double custoEnvio) { this.custoEnvio = custoEnvio; }
     public void setTarifaPlataforma(Double tarifaPlataforma) { this.tarifaPlataforma = tarifaPlataforma; }
     public void setCustoProdutoVendido(Double custoProdutoVendido) { this.custoProdutoVendido = custoProdutoVendido; }
     public void setDespesasOperacionais(Double despesasOperacionais) { this.despesasOperacionais = despesasOperacionais; }
+
+    // Setters para campos de cálculo (opcional, normalmente calculados)
+    public void setFaturamento(Double faturamento) { this.faturamento = faturamento; }
+    public void setCustoEfetivoTotal(Double custoEfetivoTotal) { this.custoEfetivoTotal = custoEfetivoTotal; }
+    public void setLucroBruto(Double lucroBruto) { this.lucroBruto = lucroBruto; }
+    public void setLucroLiquido(Double lucroLiquido) { this.lucroLiquido = lucroLiquido; }
+    public void setRoi(Double roi) { this.roi = roi; }
+
+    // ✅ MÉTODOS DEPRECIADOS (mantidos apenas para compatibilidade se necessário)
+    @Deprecated
+    public Integer getQuantidade() {
+        return getQuantidadeTotal(); // Delega para o novo método
+    }
+
+    @Deprecated
+    public void setQuantidade(Integer quantidade) {
+        // Não faz nada - quantidade agora é derivada dos itens
+        System.out.println("⚠️ AVISO: setQuantidade() depreciado. Use setItens() em vez disso.");
+    }
+
+    @Deprecated
+    public Long getProdutoId() {
+        // Retorna o primeiro produto se houver itens
+        return !itens.isEmpty() ? itens.get(0).getProdutoId() : null;
+    }
+
+    @Deprecated
+    public void setProdutoId(Long produtoId) {
+        System.out.println("⚠️ AVISO: setProdutoId() depreciado. Use setItens() em vez disso.");
+    }
+
+    @Deprecated
+    public String getProdutoNome() {
+        return !itens.isEmpty() ? itens.get(0).getProdutoNome() : "";
+    }
+
+    @Deprecated
+    public void setProdutoNome(String produtoNome) {
+        System.out.println("⚠️ AVISO: setProdutoNome() depreciado. Use setItens() em vez disso.");
+    }
+
+    @Deprecated
+    public String getProdutoSku() {
+        return !itens.isEmpty() ? itens.get(0).getProdutoSku() : "";
+    }
+
+    @Deprecated
+    public void setProdutoSku(String produtoSku) {
+        System.out.println("⚠️ AVISO: setProdutoSku() depreciado. Use setItens() em vez disso.");
+    }
 }

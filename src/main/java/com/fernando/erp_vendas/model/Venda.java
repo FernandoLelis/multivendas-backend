@@ -22,16 +22,17 @@ public class Venda {
 
     private String plataforma;
 
-    private Integer quantidade;
+    // ⚠️ REMOVIDO: quantidade (agora está em ItemVenda)
+    // private Integer quantidade;
 
-    // ✅ CORREÇÃO: Relação com Produto mantida
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "produto_id")
-    private Produto produto;
+    // ⚠️ REMOVIDO: produto (agora está em ItemVenda)
+    // @ManyToOne(fetch = FetchType.LAZY)
+    // @JoinColumn(name = "produto_id")
+    // private Produto produto;
 
     // Preços e custos
     @Column(name = "preco_venda")
-    private Double precoVenda = 0.0; // ⚠️ AGORA: PREÇO TOTAL da venda (não unitário)
+    private Double precoVenda = 0.0; // ⚠️ AGORA: PREÇO TOTAL da venda (soma de todos os produtos)
 
     @Column(name = "frete_pago_pelo_cliente")
     private Double fretePagoPeloCliente = 0.0;
@@ -43,7 +44,7 @@ public class Venda {
     private Double tarifaPlataforma = 0.0;
 
     @Column(name = "custo_produto_vendido")
-    private Double custoProdutoVendido = 0.0; // ✅ Já é TOTAL (PEPS × quantidade)
+    private Double custoProdutoVendido = 0.0; // ✅ SOMA dos custos de TODOS os produtos (PEPS)
 
     @Column(name = "despesas_operacionais")
     private Double despesasOperacionais = 0.0;
@@ -54,21 +55,21 @@ public class Venda {
     @JsonIgnore
     private User user;
 
-    // ✅ Rastreamento PEPS
+    // ✅ Rastreamento PEPS - AGORA: Lista de produtos da venda
     @OneToMany(mappedBy = "venda", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnore
     private List<ItemVenda> itens = new ArrayList<>();
 
-    // Construtores
+    // Construtor padrão
     public Venda() {}
 
-    public Venda(String idPedido, String plataforma, Integer quantidade, Produto produto,
+    // ⚠️ CONSTRUTOR ATUALIZADO: Removidos produto e quantidade
+    public Venda(String idPedido, String plataforma,
                  Double precoVenda, Double fretePagoPeloCliente, Double custoEnvio,
-                 Double tarifaPlataforma, Double custoProdutoVendido, Double despesasOperacionais, User user) {
+                 Double tarifaPlataforma, Double custoProdutoVendido,
+                 Double despesasOperacionais, User user) {
         this.idPedido = idPedido;
         this.plataforma = plataforma;
-        this.quantidade = quantidade;
-        this.produto = produto;
         this.precoVenda = precoVenda != null ? precoVenda : 0.0;
         this.fretePagoPeloCliente = fretePagoPeloCliente != null ? fretePagoPeloCliente : 0.0;
         this.custoEnvio = custoEnvio != null ? custoEnvio : 0.0;
@@ -91,11 +92,13 @@ public class Venda {
     public String getPlataforma() { return plataforma; }
     public void setPlataforma(String plataforma) { this.plataforma = plataforma; }
 
-    public Integer getQuantidade() { return quantidade; }
-    public void setQuantidade(Integer quantidade) { this.quantidade = quantidade; }
+    // ⚠️ REMOVIDO: getQuantidade() e setQuantidade()
+    // public Integer getQuantidade() { return quantidade; }
+    // public void setQuantidade(Integer quantidade) { this.quantidade = quantidade; }
 
-    public Produto getProduto() { return produto; }
-    public void setProduto(Produto produto) { this.produto = produto; }
+    // ⚠️ REMOVIDO: getProduto() e setProduto()
+    // public Produto getProduto() { return produto; }
+    // public void setProduto(Produto produto) { this.produto = produto; }
 
     public Double getPrecoVenda() { return precoVenda != null ? precoVenda : 0.0; }
     public void setPrecoVenda(Double precoVenda) { this.precoVenda = precoVenda != null ? precoVenda : 0.0; }
@@ -118,21 +121,51 @@ public class Venda {
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }
 
+    // ✅ MANTIDO: Lista de itens
     public List<ItemVenda> getItens() { return itens; }
     public void setItens(List<ItemVenda> itens) { this.itens = itens; }
 
-    // ✅ CORREÇÃO: FÓRMULAS ATUALIZADAS - precoVenda já é TOTAL (não multiplicar)
+    // ✅ NOVO: Método para adicionar item à venda
+    public void adicionarItem(ItemVenda item) {
+        if (this.itens == null) {
+            this.itens = new ArrayList<>();
+        }
+        item.setVenda(this);
+        this.itens.add(item);
+    }
+
+    // ✅ NOVO: Método para calcular quantidade total (soma de todos os itens)
+    public Integer getQuantidadeTotal() {
+        if (itens == null || itens.isEmpty()) {
+            return 0;
+        }
+        return itens.stream()
+                .mapToInt(ItemVenda::getQuantidade)
+                .sum();
+    }
+
+    // ✅ NOVO: Método para calcular custo total dos produtos (soma de todos os itens)
+    public Double getCustoProdutosTotal() {
+        if (itens == null || itens.isEmpty()) {
+            return 0.0;
+        }
+        return itens.stream()
+                .mapToDouble(item -> item.getCustoTotal().doubleValue())
+                .sum();
+    }
+
+    // ✅ CORREÇÃO: FÓRMULAS ATUALIZADAS - precoVenda já é TOTAL (soma de todos os produtos)
 
     // 💰 FATURAMENTO = Preço Total da Venda + Frete
     // ⚠️ NÃO multiplicar por quantidade - precoVenda já é TOTAL
     public Double calcularFaturamento() {
-        double precoTotal = getPrecoVenda(); // ✅ Já é total, não multiplicar
+        double precoTotal = getPrecoVenda(); // ✅ Já é total de todos os produtos
         double frete = getFretePagoPeloCliente();
         return precoTotal + frete;
     }
 
     // 💸 CUSTO EFETIVO = Custo PEPS (TOTAL) + Custo Envio + Tarifa
-    // custoProdutoVendido JÁ É TOTAL (calculado pelo PEPS × quantidade)
+    // custoProdutoVendido JÁ É TOTAL (soma de todos os produtos)
     public Double calcularCustoEfetivoTotal() {
         double custoProduto = getCustoProdutoVendido(); // Já é total
         double custoEnvioVal = getCustoEnvio();
@@ -156,5 +189,23 @@ public class Venda {
         Double custoEfetivo = calcularCustoEfetivoTotal();
         Double lucroLiquido = calcularLucroLiquido();
         return (custoEfetivo > 0) ? (lucroLiquido / custoEfetivo) * 100 : 0.0;
+    }
+
+    // ✅ NOVO: Método para verificar se venda tem produtos
+    public boolean temProdutos() {
+        return itens != null && !itens.isEmpty();
+    }
+
+    // ✅ NOVO: Método para obter lista de produtos distintos
+    public List<Produto> getProdutosDistintos() {
+        if (itens == null || itens.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return itens.stream()
+                .map(ItemVenda::getLote)
+                .filter(lote -> lote != null && lote.getProduto() != null)
+                .map(EntradaEstoque::getProduto)
+                .distinct()
+                .collect(java.util.stream.Collectors.toList());
     }
 }
