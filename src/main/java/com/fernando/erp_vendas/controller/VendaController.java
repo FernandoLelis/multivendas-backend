@@ -618,7 +618,7 @@ public class VendaController {
         }
     }
 
-    // ✅ ATUALIZADO: GET - Buscar venda por nome DO USUÁRIO - AGORA COM DTO (PROCURA EM MÚLTIPLOS PRODUTOS)
+    // ✅✅✅ ATUALIZADO: GET - Buscar venda por nome DO USUÁRIO - AGORA USANDO O NOVO MÉTODO
     @GetMapping("/produto/{nome}")
     public ResponseEntity<?> buscarPorNomeProduto(@PathVariable String nome) {
         try {
@@ -631,26 +631,19 @@ public class VendaController {
                 return ResponseEntity.notFound().build();
             }
 
-            // 2. Buscar vendas que contenham algum desses produtos
+            // ✅ 2. USANDO O NOVO MÉTODO: Buscar vendas que contenham algum desses produtos
             List<Venda> vendasEncontradas = new ArrayList<>();
-            List<Venda> todasVendas = vendaRepository.findByUserWithProduto(currentUser);
-
-            for (Venda venda : todasVendas) {
-                if (venda.getItens() != null) {
-                    boolean contemProduto = venda.getItens().stream()
-                            .anyMatch(item -> {
-                                Produto p = item.getLote().getProduto();
-                                return produtos.stream()
-                                        .anyMatch(produtoBusca -> produtoBusca.getId().equals(p.getId()));
-                            });
-
-                    if (contemProduto) {
-                        vendasEncontradas.add(venda);
-                    }
-                }
+            for (Produto produto : produtos) {
+                // ✅ USA O NOVO MÉTODO findByProdutoInItens() do VendaRepository
+                vendasEncontradas.addAll(vendaRepository.findByProdutoInItens(produto, currentUser));
             }
 
-            List<VendaDTO> vendasDTO = vendasEncontradas.stream()
+            // Remover duplicatas (uma venda pode conter múltiplos produtos)
+            List<Venda> vendasUnicas = vendasEncontradas.stream()
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            List<VendaDTO> vendasDTO = vendasUnicas.stream()
                     .map(VendaDTO::new)
                     .collect(Collectors.toList());
 
