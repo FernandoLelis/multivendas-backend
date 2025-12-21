@@ -2,6 +2,7 @@ package com.fernando.erp_vendas.dto;
 
 import com.fernando.erp_vendas.model.Venda;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -16,12 +17,6 @@ public class VendaDTO {
 
     private String idPedido;
     private String plataforma;
-
-    // ✅ REMOVIDO: quantidade, produtoId, produtoNome, produtoSku (agora estão nos itens)
-    // private Integer quantidade;
-    // private Long produtoId;
-    // private String produtoNome;
-    // private String produtoSku;
 
     // ✅ NOVO: Lista de produtos da venda
     private List<ItemVendaDTO> itens = new ArrayList<>();
@@ -167,45 +162,54 @@ public class VendaDTO {
     public void setLucroLiquido(Double lucroLiquido) { this.lucroLiquido = lucroLiquido; }
     public void setRoi(Double roi) { this.roi = roi; }
 
-    // ✅ MÉTODOS DEPRECIADOS (mantidos apenas para compatibilidade se necessário)
+    // ✅ MÉTODOS DEPRECIADOS (COM @JsonIgnore PARA EVITAR SERIALIZAÇÃO)
+
     @Deprecated
+    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
     public Integer getQuantidade() {
-        return getQuantidadeTotal(); // Delega para o novo método
+        return getQuantidadeTotal();
     }
 
     @Deprecated
+    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
     public void setQuantidade(Integer quantidade) {
         // Não faz nada - quantidade agora é derivada dos itens
         System.out.println("⚠️ AVISO: setQuantidade() depreciado. Use setItens() em vez disso.");
     }
 
     @Deprecated
+    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
     public Long getProdutoId() {
         // Retorna o primeiro produto se houver itens
         return !itens.isEmpty() ? itens.get(0).getProdutoId() : null;
     }
 
     @Deprecated
+    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
     public void setProdutoId(Long produtoId) {
         System.out.println("⚠️ AVISO: setProdutoId() depreciado. Use setItens() em vez disso.");
     }
 
     @Deprecated
+    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
     public String getProdutoNome() {
         return !itens.isEmpty() ? itens.get(0).getProdutoNome() : "";
     }
 
     @Deprecated
+    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
     public void setProdutoNome(String produtoNome) {
         System.out.println("⚠️ AVISO: setProdutoNome() depreciado. Use setItens() em vez disso.");
     }
 
     @Deprecated
+    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
     public String getProdutoSku() {
         return !itens.isEmpty() ? itens.get(0).getProdutoSku() : "";
     }
 
     @Deprecated
+    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
     public void setProdutoSku(String produtoSku) {
         System.out.println("⚠️ AVISO: setProdutoSku() depreciado. Use setItens() em vez disso.");
     }
