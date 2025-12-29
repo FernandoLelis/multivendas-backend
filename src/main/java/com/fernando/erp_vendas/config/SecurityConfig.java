@@ -94,15 +94,15 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         // Endpoints públicos (sem autenticação)
-                        .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/migracao/database/**").permitAll()
-                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/register").permitAll()
+                        .requestMatchers("/api/auth/health").permitAll()
                         .requestMatchers("/health").permitAll()
                         .requestMatchers("/").permitAll()
 
-                        // ⭐ PERMITIR ENDPOINTS ADMINISTRATIVOS TEMPORÁRIOS
-                        .requestMatchers(HttpMethod.POST, "/api/auth/admin-reset-password").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/auth/admin/debug-users").permitAll()
+                        // 🚨 BLOQUEADOS PARA PRODUÇÃO - Endpoints temporários
+                        // .requestMatchers("/api/auth/admin-reset-password").authenticated() // OU remover completamente
+                        // .requestMatchers("/api/auth/admin/debug-users").authenticated() // OU remover completamente
 
                         // Todos os outros endpoints exigem autenticação
                         .anyRequest().authenticated()
