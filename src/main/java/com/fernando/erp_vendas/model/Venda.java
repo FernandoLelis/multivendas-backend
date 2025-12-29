@@ -15,20 +15,12 @@ public class Venda {
     private Long id;
 
     @Column(name = "data", nullable = false)
-    private LocalDateTime data = LocalDateTime.now();
+    private LocalDateTime data; // ✅ CORRIGIDO: Removido valor padrão
 
     @Column(name = "id_pedido", unique = true)
     private String idPedido;
 
     private String plataforma;
-
-    // ⚠️ REMOVIDO: quantidade (agora está em ItemVenda)
-    // private Integer quantidade;
-
-    // ⚠️ REMOVIDO: produto (agora está em ItemVenda)
-    // @ManyToOne(fetch = FetchType.LAZY)
-    // @JoinColumn(name = "produto_id")
-    // private Produto produto;
 
     // Preços e custos
     @Column(name = "preco_venda")
@@ -91,14 +83,6 @@ public class Venda {
 
     public String getPlataforma() { return plataforma; }
     public void setPlataforma(String plataforma) { this.plataforma = plataforma; }
-
-    // ⚠️ REMOVIDO: getQuantidade() e setQuantidade()
-    // public Integer getQuantidade() { return quantidade; }
-    // public void setQuantidade(Integer quantidade) { this.quantidade = quantidade; }
-
-    // ⚠️ REMOVIDO: getProduto() e setProduto()
-    // public Produto getProduto() { return produto; }
-    // public void setProduto(Produto produto) { this.produto = produto; }
 
     public Double getPrecoVenda() { return precoVenda != null ? precoVenda : 0.0; }
     public void setPrecoVenda(Double precoVenda) { this.precoVenda = precoVenda != null ? precoVenda : 0.0; }

@@ -60,6 +60,12 @@ public class EntradaEstoque {
     @JsonIgnore
     private List<ItemVenda> itensVenda = new ArrayList<>();
 
+    // 🆕 NOVO: Relacionamento com ItemCompra (FASE 45)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "item_compra_id")
+    @JsonIgnore
+    private ItemCompra itemCompra;
+
     // Construtor padrão
     public EntradaEstoque() {
     }
@@ -96,9 +102,26 @@ public class EntradaEstoque {
         }
     }
 
-    // ... (todos os outros métodos permanecem IGUAIS - não mude nada além do que já está)
+    // 🆕 CONSTRUTOR PARA CRIAR LOTES A PARTIR DE ITEMCOMPRA
+    public EntradaEstoque(ItemCompra itemCompra) {
+        this.produto = itemCompra.getProduto();
+        this.quantidade = itemCompra.getQuantidade();
+        this.saldo = itemCompra.getQuantidade();
+        this.custoTotal = itemCompra.getCustoTotal();
+        this.custoUnitario = itemCompra.getCustoUnitario();
+        this.fornecedor = itemCompra.getCompra().getFornecedor();
+        this.idPedidoCompra = itemCompra.getCompra().getIdPedidoCompra();
+        this.user = itemCompra.getUser();
+        this.itemCompra = itemCompra;
+        this.dataEntrada = itemCompra.getCompra().getData();
 
-    // Getters e Setters (mantenha todos como estão)
+        // Se houver observações na compra, copia para o lote
+        if (itemCompra.getCompra().getObservacoes() != null) {
+            this.observacoes = itemCompra.getCompra().getObservacoes();
+        }
+    }
+
+    // Getters e Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -137,6 +160,10 @@ public class EntradaEstoque {
 
     public List<ItemVenda> getItensVenda() { return itensVenda; }
     public void setItensVenda(List<ItemVenda> itensVenda) { this.itensVenda = itensVenda; }
+
+    // 🆕 Getter e Setter para ItemCompra
+    public ItemCompra getItemCompra() { return itemCompra; }
+    public void setItemCompra(ItemCompra itemCompra) { this.itemCompra = itemCompra; }
 
     // Métodos de negócio (mantenha todos)
     public boolean baixarEstoque(Integer quantidadeBaixa) {

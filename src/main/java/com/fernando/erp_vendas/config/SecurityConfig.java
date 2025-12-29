@@ -5,6 +5,7 @@ import com.fernando.erp_vendas.service.JwtService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -94,10 +95,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Endpoints públicos (sem autenticação)
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/migracao/database/**").permitAll()  // ← LINHA ADICIONADA: Migração sem autenticação
-                        .requestMatchers("/actuator/**").permitAll()  // Todos endpoints do Actuator
-                        .requestMatchers("/health").permitAll()       // Endpoint direto /health
+                        .requestMatchers("/api/migracao/database/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/health").permitAll()
                         .requestMatchers("/").permitAll()
+
+                        // ⭐ PERMITIR ENDPOINTS ADMINISTRATIVOS TEMPORÁRIOS
+                        .requestMatchers(HttpMethod.POST, "/api/auth/admin-reset-password").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/admin/debug-users").permitAll()
 
                         // Todos os outros endpoints exigem autenticação
                         .anyRequest().authenticated()

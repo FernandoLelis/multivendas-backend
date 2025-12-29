@@ -13,7 +13,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -42,6 +44,472 @@ public class VendaController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
+    // ✅✅✅ CORRIGIDO COMPLETAMENTE: Método para extrair data (agora aceita apenas data sem hora)
+    private LocalDateTime extrairData(Object dataObj) {
+        if (dataObj == null || dataObj.toString().isEmpty()) {
+            return null; // ⚠️ IMPORTANTE: não usar LocalDateTime.now()
+        }
+
+        String dataString = dataObj.toString().trim();
+        System.out.println("📅 DEBUG DATA - String recebida: '" + dataString + "'");
+
+        try {
+            // ✅ FORMATO ESPERADO: "YYYY-MM-DD" (apenas data, sem hora)
+            // Converter para LocalDateTime com hora 00:00:00
+            LocalDate dataApenas = LocalDate.parse(dataString);
+            return dataApenas.atStartOfDay(); // 00:00:00
+
+        } catch (Exception e1) {
+            try {
+                // ✅ Se vier com formato ISO (backward compatibility): "YYYY-MM-DDTHH:mm:ss"
+                if (dataString.contains("T")) {
+                    return LocalDateTime.parse(dataString);
+                } else {
+                    // Tentar outros formatos de data
+                    LocalDate dataApenas = LocalDate.parse(dataString, DateTimeFormatter.ISO_LOCAL_DATE);
+                    return dataApenas.atStartOfDay();
+                }
+            } catch (Exception e2) {
+                try {
+                    // ✅ Tentar formato com espaço: "YYYY-MM-DD HH:mm:ss"
+                    String comT = dataString.replace(" ", "T");
+                    return LocalDateTime.parse(comT);
+                } catch (Exception e3) {
+                    System.out.println("❌ ERRO DATA - Formato inválido: " + dataString +
+                            ". Esperado: YYYY-MM-DD (apenas data)");
+                    return null;
+                }
+            }
+        }
+    }
+
+    // ✅ MÉTODO AUXILIAR: Extrair Double com valor padrão
+    private Double getDoubleValue(Object value, Double defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Double.valueOf(value.toString());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    // ✅✅✅ CORRIGIDO COMPLETAMENTE: POST - Criar nova venda com MÚLTIPLOS PRODUTOS E DATA CORRETA
+    @PostMapping
+    public ResponseEntity<?> criarVenda(@RequestBody Map<String, Object> vendaData) {
+        try {
+            System.out.println("🔍 DEBUG INICIAL - Dados recebidos: " + vendaData);
+
+            User currentUser = getCurrentUser();
+
+            // ✅ 1️⃣ VALIDAR DADOS OBRIGATÓRIOS
+            if (!vendaData.containsKey("idPedido") || !vendaData.containsKey("plataforma") ||
+                    !vendaData.containsKey("precoVenda") || !vendaData.containsKey("itens")) {
+                return ResponseEntity.badRequest().body("Dados incompletos. Campos obrigatórios: idPedido, plataforma, precoVenda, itens");
+            }
+
+            // ✅ 2️⃣ EXTRAIR DADOS BÁSICOS DA VENDA
+            String idPedido = vendaData.get("idPedido").toString();
+            String plataforma = vendaData.get("plataforma").toString();
+            Double precoVenda = Double.valueOf(vendaData.get("precoVenda").toString());
+
+            // ✅✅✅ CORREÇÃO CRÍTICA: EXTRAIR E VALIDAR DATA
+            LocalDateTime dataVenda = extrairData(vendaData.get("data"));
+            if (dataVenda == null) {
+                return ResponseEntity.badRequest()
+                        .body("Data da venda é obrigatória. Formato esperado: YYYY-MM-DD (apenas data)");
+            }
+
+            // ✅ EXTRAIR DADOS OPCIONAIS
+            Double fretePagoPeloCliente = getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0);
+            Double custoEnvio = getDoubleValue(vendaData.get("custoEnvio"), 0.0);
+            Double tarifaPlataforma = getDoubleValue(vendaData.get("tarifaPlataforma"), 0.0);
+            Double despesasOperacionais = getDoubleValue(vendaData.get("despesasOperacionais"), 0.0);
+
+            // ✅ 3️⃣ VALIDAR E EXTRAIR ITENS DA VENDA
+            List<Map<String, Object>> itensData = (List<Map<String, Object>>) vendaData.get("itens");
+
+            // ✅✅✅ ADICIONAR LOGS CRÍTICOS AQUI
+            System.out.println("🔍 DEBUG ITENS - Tipo: " + (itensData != null ? itensData.getClass().getName() : "null"));
+            System.out.println("🔍 DEBUG ITENS - Tamanho: " + (itensData != null ? itensData.size() : "null"));
+
+            if (itensData == null || itensData.isEmpty()) {
+                return ResponseEntity.badRequest().body("A venda deve conter pelo menos um produto");
+            }
+
+            // ✅ DEBUG DETALHADO DE CADA ITEM
+            for (int i = 0; i < itensData.size(); i++) {
+                Map<String, Object> item = itensData.get(i);
+                System.out.println("🔍 DEBUG ITEM " + i + ": " + item);
+                System.out.println("   produtoId: " + item.get("produtoId"));
+                System.out.println("   quantidade: " + item.get("quantidade"));
+
+                // ✅ VALIDAR CAMPOS OBRIGATÓRIOS NO ITEM
+                if (!item.containsKey("produtoId") || item.get("produtoId") == null) {
+                    return ResponseEntity.badRequest().body("Item " + i + " não contém produtoId");
+                }
+                if (!item.containsKey("quantidade") || item.get("quantidade") == null) {
+                    return ResponseEntity.badRequest().body("Item " + i + " não contém quantidade");
+                }
+            }
+
+            // ✅ 4️⃣ VERIFICAR SE JÁ EXISTE VENDA COM MESMO ID DO PEDIDO
+            if (vendaRepository.findByIdPedidoAndUser(idPedido, currentUser).isPresent()) {
+                return ResponseEntity.badRequest().body("Já existe uma venda com este ID do pedido");
+            }
+
+            // ✅ 5️⃣ CRIAR A VENDA (SEM PRODUTOS AINDA)
+            Venda venda = new Venda();
+            venda.setData(dataVenda); // ✅ AGORA COM DATA CORRETA
+            venda.setIdPedido(idPedido);
+            venda.setPlataforma(plataforma);
+            venda.setPrecoVenda(precoVenda);
+            venda.setFretePagoPeloCliente(fretePagoPeloCliente);
+            venda.setCustoEnvio(custoEnvio);
+            venda.setTarifaPlataforma(tarifaPlataforma);
+            venda.setDespesasOperacionais(despesasOperacionais);
+            venda.setUser(currentUser);
+
+            // ✅ 6️⃣ CRIAR LISTA DE ITENS PRELIMINARES (APENAS COM PRODUTO E QUANTIDADE)
+            List<ItemVenda> itensPreliminares = new ArrayList<>();
+            for (Map<String, Object> itemData : itensData) {
+                // ✅✅✅ EXTRAÇÃO SEGURA COM TRY-CATCH
+                Long produtoId;
+                Integer quantidade;
+
+                try {
+                    produtoId = Long.valueOf(itemData.get("produtoId").toString());
+                } catch (Exception e) {
+                    return ResponseEntity.badRequest().body("Erro no produtoId: " + e.getMessage());
+                }
+
+                try {
+                    quantidade = Integer.valueOf(itemData.get("quantidade").toString());
+                } catch (Exception e) {
+                    return ResponseEntity.badRequest().body("Erro na quantidade: " + e.getMessage());
+                }
+
+                // ✅ VERIFICAR SE O PRODUTO EXISTE E PERTENCE AO USUÁRIO
+                Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
+                if (!produtoOpt.isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body("Produto não encontrado ou não pertence ao usuário: ID " + produtoId);
+                }
+                Produto produto = produtoOpt.get();
+
+                // ✅ VERIFICAR ESTOQUE PARA ESTE PRODUTO
+                Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
+                if (saldoDisponivel < quantidade) {
+                    return ResponseEntity.badRequest()
+                            .body("Estoque insuficiente para produto: " + produto.getNome() +
+                                    ". Disponível: " + saldoDisponivel + ", Necessário: " + quantidade);
+                }
+
+                // ✅ ENCONTRAR O PRÓXIMO LOTE DISPONÍVEL (PEPS)
+                EntradaEstoque lotePreliminar = entradaEstoqueRepository
+                        .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAsc(produto, currentUser, 0)
+                        .stream()
+                        .findFirst()
+                        .orElseThrow(() -> new RuntimeException("Produto sem estoque: " + produto.getNome()));
+
+                // ✅ CRIAR ITEM PRELIMINAR
+                ItemVenda itemPreliminar = new ItemVenda();
+                itemPreliminar.setVenda(venda);
+                itemPreliminar.setLote(lotePreliminar);
+                itemPreliminar.setQuantidade(quantidade);
+                itemPreliminar.setCustoUnitario(lotePreliminar.getCustoUnitario());
+                itemPreliminar.setUser(currentUser);
+
+                itensPreliminares.add(itemPreliminar);
+            }
+
+            // ✅ 7️⃣ ADICIONAR ITENS À VENDA
+            venda.setItens(itensPreliminares);
+
+            // ✅ 8️⃣ SALVAR VENDA E PROCESSAR PEPS
+            estoqueService.calcularCustoVendaERegistrarItens(venda);
+
+            // ✅ 9️⃣ BUSCAR VENDA COMPLETA (COM ITENS PERSISTIDOS)
+            Optional<Venda> vendaCompleta = vendaRepository.findByIdPedidoAndUser(idPedido, currentUser);
+            if (!vendaCompleta.isPresent()) {
+                throw new RuntimeException("Erro ao recuperar venda criada: " + idPedido);
+            }
+
+            System.out.println("✅ Venda criada com sucesso: " + vendaCompleta.get().getIdPedido() +
+                    ", Data: " + vendaCompleta.get().getData() +
+                    ", Total produtos: " + vendaCompleta.get().getItens().size());
+
+            return ResponseEntity.ok(new VendaDTO(vendaCompleta.get()));
+
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body("Erro de formato numérico: " + e.getMessage());
+        } catch (ClassCastException e) {
+            return ResponseEntity.badRequest().body("Erro de tipo de dados: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("❌ Erro ao criar venda: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao criar venda: " + e.getMessage());
+        }
+    }
+
+    // ✅✅✅ ATUALIZADO: PUT - Atualizar venda existente DO USUÁRIO (AGORA COM DATA)
+    @PutMapping("/{id}")
+    public ResponseEntity<?> atualizarVenda(@PathVariable Long id, @RequestBody Map<String, Object> vendaData) {
+        try {
+            User currentUser = getCurrentUser();
+
+            // ✅ 1️⃣ BUSCAR VENDA EXISTENTE
+            Optional<Venda> vendaExistenteOpt = vendaRepository.findByIdAndUser(id, currentUser);
+            if (!vendaExistenteOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Venda vendaExistente = vendaExistenteOpt.get();
+
+            // ✅ 2️⃣ VERIFICAR SE JÁ EXISTE OUTRA VENDA COM MESMO ID DO PEDIDO
+            if (vendaData.containsKey("idPedido")) {
+                String novoIdPedido = vendaData.get("idPedido").toString();
+                Optional<Venda> vendaComMesmoPedido = vendaRepository.findByIdPedidoAndUser(novoIdPedido, currentUser);
+                if (vendaComMesmoPedido.isPresent() && !vendaComMesmoPedido.get().getId().equals(id)) {
+                    return ResponseEntity.badRequest().body("Já existe outra venda com este ID do pedido");
+                }
+                vendaExistente.setIdPedido(novoIdPedido);
+            }
+
+            // ✅ 3️⃣ ATUALIZAR APENAS CAMPOS PERMITIDOS (INCLUINDO DATA)
+            if (vendaData.containsKey("data")) {
+                LocalDateTime novaData = extrairData(vendaData.get("data"));
+                if (novaData == null) {
+                    return ResponseEntity.badRequest()
+                            .body("Formato de data inválido. Esperado: YYYY-MM-DD");
+                }
+                vendaExistente.setData(novaData);
+            }
+            if (vendaData.containsKey("plataforma")) {
+                vendaExistente.setPlataforma(vendaData.get("plataforma").toString());
+            }
+            if (vendaData.containsKey("precoVenda")) {
+                vendaExistente.setPrecoVenda(Double.valueOf(vendaData.get("precoVenda").toString()));
+            }
+            if (vendaData.containsKey("fretePagoPeloCliente")) {
+                vendaExistente.setFretePagoPeloCliente(getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0));
+            }
+            if (vendaData.containsKey("custoEnvio")) {
+                vendaExistente.setCustoEnvio(getDoubleValue(vendaData.get("custoEnvio"), 0.0));
+            }
+            if (vendaData.containsKey("tarifaPlataforma")) {
+                vendaExistente.setTarifaPlataforma(getDoubleValue(vendaData.get("tarifaPlataforma"), 0.0));
+            }
+            if (vendaData.containsKey("despesasOperacionais")) {
+                vendaExistente.setDespesasOperacionais(getDoubleValue(vendaData.get("despesasOperacionais"), 0.0));
+            }
+
+            // ✅ 4️⃣ SALVAR VENDA ATUALIZADA
+            Venda vendaSalva = vendaRepository.save(vendaExistente);
+
+            return ResponseEntity.ok(new VendaDTO(vendaSalva));
+
+        } catch (Exception e) {
+            System.out.println("❌ Erro ao atualizar venda: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Erro ao atualizar venda: " + e.getMessage());
+        }
+    }
+
+    // ✅ ATUALIZADO: DELETE - Excluir venda com reversão de estoque DO USUÁRIO
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> excluirVenda(@PathVariable Long id) {
+        try {
+            User currentUser = getCurrentUser();
+
+            Optional<Venda> vendaOpt = vendaRepository.findByIdAndUser(id, currentUser);
+            if (!vendaOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Venda venda = vendaOpt.get();
+
+            // ✅ REVERTER ESTOQUE BASEADO NOS ITENS RASTREADOS
+            estoqueService.reverterEstoqueVenda(venda);
+
+            // Excluir a venda
+            vendaRepository.deleteById(id);
+
+            System.out.println("✅ Venda excluída e estoque revertido: " + venda.getIdPedido());
+            return ResponseEntity.noContent().build();
+
+        } catch (Exception e) {
+            System.out.println("❌ Erro ao reverter estoque na exclusão da venda: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Erro ao excluir venda: " + e.getMessage());
+        }
+    }
+
+    // ========== RESTANTE DO CÓDIGO (MÉTODOS GET E DASHBOARD) ==========
+    // (Mantidos exatamente como estavam, apenas o método extrairData foi alterado)
+
+    // ✅ ATUALIZADO: GET - Listar todas as vendas DO USUÁRIO - AGORA COM DTO
+    @GetMapping
+    public ResponseEntity<?> listarTodas() {
+        try {
+            User currentUser = getCurrentUser();
+            System.out.println("🔍 DEBUG VENDAS - Buscando vendas para usuário: " + currentUser.getEmail());
+
+            List<Venda> vendas = vendaRepository.findByUserWithProduto(currentUser);
+            System.out.println("📊 DEBUG VENDAS - Total de vendas encontradas: " + vendas.size());
+
+            // ✅ CONVERTER PARA DTO
+            List<VendaDTO> vendasDTO = vendas.stream()
+                    .map(VendaDTO::new)
+                    .collect(Collectors.toList());
+
+            System.out.println("✅ Vendas convertidas para DTO: " + vendasDTO.size());
+            return ResponseEntity.ok(vendasDTO);
+        } catch (Exception e) {
+            System.out.println("❌ ERRO CRÍTICO em listarTodas: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao listar vendas: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> buscarPorId(@PathVariable Long id) {
+        try {
+            User currentUser = getCurrentUser();
+            Optional<Venda> venda = vendaRepository.findByIdAndUser(id, currentUser);
+            return venda.map(v -> ResponseEntity.ok(new VendaDTO(v)))
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar venda: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/plataforma/{plataforma}")
+    public ResponseEntity<?> buscarPorPlataforma(@PathVariable String plataforma) {
+        try {
+            User currentUser = getCurrentUser();
+            List<Venda> vendas = vendaRepository.findByPlataformaAndUser(plataforma, currentUser);
+
+            List<VendaDTO> vendasDTO = vendas.stream()
+                    .map(VendaDTO::new)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(vendasDTO);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar vendas por plataforma: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/periodo")
+    public ResponseEntity<?> buscarPorPeriodo(
+            @RequestParam LocalDateTime inicio,
+            @RequestParam LocalDateTime fim) {
+        try {
+            User currentUser = getCurrentUser();
+            List<Venda> vendas = vendaRepository.findByDataBetweenAndUser(inicio, fim, currentUser);
+
+            List<VendaDTO> vendasDTO = vendas.stream()
+                    .map(VendaDTO::new)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(vendasDTO);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar vendas por período: " + e.getMessage());
+        }
+    }
+
+    // ✅✅✅ ATUALIZADO: GET - Buscar venda por nome DO USUÁRIO
+    @GetMapping("/produto/{nome}")
+    public ResponseEntity<?> buscarPorNomeProduto(@PathVariable String nome) {
+        try {
+            User currentUser = getCurrentUser();
+
+            // 1. Buscar produtos com nome similar
+            List<Produto> produtos = produtoRepository.findByNomeContainingAndUser(nome, currentUser);
+
+            if (produtos.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // ✅ 2. USANDO O NOVO MÉTODO: Buscar vendas que contenham algum desses produtos
+            List<Venda> vendasEncontradas = new ArrayList<>();
+            for (Produto produto : produtos) {
+                // ✅ USA O NOVO MÉTODO findByProdutoInItens() do VendaRepository
+                vendasEncontradas.addAll(vendaRepository.findByProdutoInItens(produto, currentUser));
+            }
+
+            // Remover duplicatas (uma venda pode conter múltiplos produtos)
+            List<Venda> vendasUnicas = vendasEncontradas.stream()
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            List<VendaDTO> vendasDTO = vendasUnicas.stream()
+                    .map(VendaDTO::new)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(vendasDTO);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar vendas por nome do produto: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/{id}/calculos")
+    public ResponseEntity<?> getCalculos(@PathVariable Long id) {
+        try {
+            User currentUser = getCurrentUser();
+            Optional<Venda> vendaOpt = vendaRepository.findByIdAndUser(id, currentUser);
+            if (!vendaOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Venda venda = vendaOpt.get();
+            Map<String, Double> calculos = new HashMap<>();
+            calculos.put("faturamento", venda.calcularFaturamento());
+            calculos.put("custoEfetivoTotal", venda.calcularCustoEfetivoTotal());
+            calculos.put("lucroBruto", venda.calcularLucroBruto());
+            calculos.put("lucroLiquido", venda.calcularLucroLiquido());
+            calculos.put("roi", venda.calcularROI());
+            calculos.put("despesasOperacionais", venda.getDespesasOperacionais());
+
+            return ResponseEntity.ok(calculos);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular métricas da venda: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/resumo-mensal")
+    public ResponseEntity<?> resumoMensal(@RequestParam int mes, @RequestParam int ano) {
+        try {
+            User currentUser = getCurrentUser();
+            LocalDateTime inicio = LocalDateTime.of(ano, mes, 1, 0, 0, 0);
+            LocalDateTime fim = LocalDateTime.of(ano, mes, 1, 23, 59, 59)
+                    .plusMonths(1)
+                    .minusDays(1);
+
+            List<Venda> vendas = vendaRepository.findByDataBetweenAndUser(inicio, fim, currentUser);
+
+            List<VendaDTO> vendasDTO = vendas.stream()
+                    .map(VendaDTO::new)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(vendasDTO);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar resumo mensal: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/pedido/{idPedido}")
+    public ResponseEntity<?> buscarPorIdPedido(@PathVariable String idPedido) {
+        try {
+            User currentUser = getCurrentUser();
+            Optional<Venda> venda = vendaRepository.findByIdPedidoAndUser(idPedido, currentUser);
+            return venda.map(v -> ResponseEntity.ok(new VendaDTO(v)))
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar venda por ID do pedido: " + e.getMessage());
+        }
+    }
+
+    // ========== MÉTODOS DO DASHBOARD (MANTIDOS) ==========
     // ✅ ATUALIZADO: Método para calcular faturamento por plataforma DO USUÁRIO (com múltiplos produtos)
     private Map<String, Double> calcularFaturamentoPorPlataforma(User user) {
         List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(user);
@@ -172,7 +640,7 @@ public class VendaController {
         }
     }
 
-    // Métodos de cálculo mensal (mantidos - precisarão ser ajustados depois)
+    // Métodos de cálculo mensal
     @GetMapping("/faturamento-mes-atual")
     public ResponseEntity<?> getFaturamentoMesAtual() {
         try {
@@ -274,439 +742,6 @@ public class VendaController {
             return ResponseEntity.ok(vendasPorDia);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao buscar vendas por dia: " + e.getMessage());
-        }
-    }
-
-    // ✅ ATUALIZADO: GET - Listar todas as vendas DO USUÁRIO - AGORA COM DTO
-    @GetMapping
-    public ResponseEntity<?> listarTodas() {
-        try {
-            User currentUser = getCurrentUser();
-            System.out.println("🔍 DEBUG VENDAS - Buscando vendas para usuário: " + currentUser.getEmail());
-
-            List<Venda> vendas = vendaRepository.findByUserWithProduto(currentUser);
-            System.out.println("📊 DEBUG VENDAS - Total de vendas encontradas: " + vendas.size());
-
-            // ✅ CONVERTER PARA DTO
-            List<VendaDTO> vendasDTO = vendas.stream()
-                    .map(VendaDTO::new)
-                    .collect(Collectors.toList());
-
-            System.out.println("✅ Vendas convertidas para DTO: " + vendasDTO.size());
-            return ResponseEntity.ok(vendasDTO);
-        } catch (Exception e) {
-            System.out.println("❌ ERRO CRÍTICO em listarTodas: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body("Erro ao listar vendas: " + e.getMessage());
-        }
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<?> buscarPorId(@PathVariable Long id) {
-        try {
-            User currentUser = getCurrentUser();
-            Optional<Venda> venda = vendaRepository.findByIdAndUser(id, currentUser);
-            return venda.map(v -> ResponseEntity.ok(new VendaDTO(v)))
-                    .orElseGet(() -> ResponseEntity.notFound().build());
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao buscar venda: " + e.getMessage());
-        }
-    }
-
-    // ✅✅✅ CORRIGIDO COMPLETAMENTE: POST - Criar nova venda com MÚLTIPLOS PRODUTOS
-    @PostMapping
-    public ResponseEntity<?> criarVenda(@RequestBody Map<String, Object> vendaData) {
-        try {
-            System.out.println("🔍 DEBUG INICIAL - Dados recebidos: " + vendaData);
-
-            User currentUser = getCurrentUser();
-
-            // ✅ 1️⃣ VALIDAR DADOS OBRIGATÓRIOS
-            if (!vendaData.containsKey("idPedido") || !vendaData.containsKey("plataforma") ||
-                    !vendaData.containsKey("precoVenda") || !vendaData.containsKey("itens")) {
-                return ResponseEntity.badRequest().body("Dados incompletos. Campos obrigatórios: idPedido, plataforma, precoVenda, itens");
-            }
-
-            // ✅ 2️⃣ EXTRAIR DADOS BÁSICOS DA VENDA
-            String idPedido = vendaData.get("idPedido").toString();
-            String plataforma = vendaData.get("plataforma").toString();
-            Double precoVenda = Double.valueOf(vendaData.get("precoVenda").toString());
-
-            // ✅ EXTRAIR DADOS OPCIONAIS
-            LocalDateTime dataVenda = extrairData(vendaData.get("data"));
-            Double fretePagoPeloCliente = getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0);
-            Double custoEnvio = getDoubleValue(vendaData.get("custoEnvio"), 0.0);
-            Double tarifaPlataforma = getDoubleValue(vendaData.get("tarifaPlataforma"), 0.0);
-            Double despesasOperacionais = getDoubleValue(vendaData.get("despesasOperacionais"), 0.0);
-
-            // ✅ 3️⃣ VALIDAR E EXTRAIR ITENS DA VENDA
-            List<Map<String, Object>> itensData = (List<Map<String, Object>>) vendaData.get("itens");
-
-            // ✅✅✅ ADICIONAR LOGS CRÍTICOS AQUI
-            System.out.println("🔍 DEBUG ITENS - Tipo: " + (itensData != null ? itensData.getClass().getName() : "null"));
-            System.out.println("🔍 DEBUG ITENS - Tamanho: " + (itensData != null ? itensData.size() : "null"));
-
-            if (itensData == null || itensData.isEmpty()) {
-                return ResponseEntity.badRequest().body("A venda deve conter pelo menos um produto");
-            }
-
-            // ✅ DEBUG DETALHADO DE CADA ITEM
-            for (int i = 0; i < itensData.size(); i++) {
-                Map<String, Object> item = itensData.get(i);
-                System.out.println("🔍 DEBUG ITEM " + i + ": " + item);
-                System.out.println("   produtoId: " + item.get("produtoId"));
-                System.out.println("   quantidade: " + item.get("quantidade"));
-
-                // ✅ VALIDAR CAMPOS OBRIGATÓRIOS NO ITEM
-                if (!item.containsKey("produtoId") || item.get("produtoId") == null) {
-                    return ResponseEntity.badRequest().body("Item " + i + " não contém produtoId");
-                }
-                if (!item.containsKey("quantidade") || item.get("quantidade") == null) {
-                    return ResponseEntity.badRequest().body("Item " + i + " não contém quantidade");
-                }
-            }
-
-            // ✅ 4️⃣ VERIFICAR SE JÁ EXISTE VENDA COM MESMO ID DO PEDIDO
-            if (vendaRepository.findByIdPedidoAndUser(idPedido, currentUser).isPresent()) {
-                return ResponseEntity.badRequest().body("Já existe uma venda com este ID do pedido");
-            }
-
-            // ✅ 5️⃣ CRIAR A VENDA (SEM PRODUTOS AINDA)
-            Venda venda = new Venda();
-            venda.setData(dataVenda);
-            venda.setIdPedido(idPedido);
-            venda.setPlataforma(plataforma);
-            venda.setPrecoVenda(precoVenda);
-            venda.setFretePagoPeloCliente(fretePagoPeloCliente);
-            venda.setCustoEnvio(custoEnvio);
-            venda.setTarifaPlataforma(tarifaPlataforma);
-            venda.setDespesasOperacionais(despesasOperacionais);
-            venda.setUser(currentUser);
-
-            // ✅ 6️⃣ CRIAR LISTA DE ITENS PRELIMINARES (APENAS COM PRODUTO E QUANTIDADE)
-            List<ItemVenda> itensPreliminares = new ArrayList<>();
-            for (Map<String, Object> itemData : itensData) {
-                // ✅✅✅ EXTRAÇÃO SEGURA COM TRY-CATCH
-                Long produtoId;
-                Integer quantidade;
-
-                try {
-                    produtoId = Long.valueOf(itemData.get("produtoId").toString());
-                } catch (Exception e) {
-                    return ResponseEntity.badRequest().body("Erro no produtoId: " + e.getMessage());
-                }
-
-                try {
-                    quantidade = Integer.valueOf(itemData.get("quantidade").toString());
-                } catch (Exception e) {
-                    return ResponseEntity.badRequest().body("Erro na quantidade: " + e.getMessage());
-                }
-
-                // ✅ VERIFICAR SE O PRODUTO EXISTE E PERTENCE AO USUÁRIO
-                Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
-                if (!produtoOpt.isPresent()) {
-                    return ResponseEntity.badRequest()
-                            .body("Produto não encontrado ou não pertence ao usuário: ID " + produtoId);
-                }
-                Produto produto = produtoOpt.get();
-
-                // ✅ VERIFICAR ESTOQUE PARA ESTE PRODUTO
-                Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
-                if (saldoDisponivel < quantidade) {
-                    return ResponseEntity.badRequest()
-                            .body("Estoque insuficiente para produto: " + produto.getNome() +
-                                    ". Disponível: " + saldoDisponivel + ", Necessário: " + quantidade);
-                }
-
-                // ✅ ENCONTRAR O PRÓXIMO LOTE DISPONÍVEL (PEPS)
-                EntradaEstoque lotePreliminar = entradaEstoqueRepository
-                        .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAsc(produto, currentUser, 0)
-                        .stream()
-                        .findFirst()
-                        .orElseThrow(() -> new RuntimeException("Produto sem estoque: " + produto.getNome()));
-
-                // ✅ CRIAR ITEM PRELIMINAR
-                ItemVenda itemPreliminar = new ItemVenda();
-                itemPreliminar.setVenda(venda);
-                itemPreliminar.setLote(lotePreliminar);
-                itemPreliminar.setQuantidade(quantidade);
-                itemPreliminar.setCustoUnitario(lotePreliminar.getCustoUnitario());
-                itemPreliminar.setUser(currentUser);
-
-                itensPreliminares.add(itemPreliminar);
-            }
-
-            // ✅ 7️⃣ ADICIONAR ITENS À VENDA
-            venda.setItens(itensPreliminares);
-
-            // ✅ 8️⃣ SALVAR VENDA E PROCESSAR PEPS
-            estoqueService.calcularCustoVendaERegistrarItens(venda);
-
-            // ✅ 9️⃣ BUSCAR VENDA COMPLETA (COM ITENS PERSISTIDOS)
-            Optional<Venda> vendaCompleta = vendaRepository.findByIdPedidoAndUser(idPedido, currentUser);
-            if (!vendaCompleta.isPresent()) {
-                throw new RuntimeException("Erro ao recuperar venda criada: " + idPedido);
-            }
-
-            System.out.println("✅ Venda criada com sucesso: " + vendaCompleta.get().getIdPedido() +
-                    ", Total produtos: " + vendaCompleta.get().getItens().size());
-
-            return ResponseEntity.ok(new VendaDTO(vendaCompleta.get()));
-
-        } catch (NumberFormatException e) {
-            return ResponseEntity.badRequest().body("Erro de formato numérico: " + e.getMessage());
-        } catch (ClassCastException e) {
-            return ResponseEntity.badRequest().body("Erro de tipo de dados: " + e.getMessage());
-        } catch (Exception e) {
-            System.out.println("❌ Erro ao criar venda: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body("Erro ao criar venda: " + e.getMessage());
-        }
-    }
-
-    // ✅ MÉTODO AUXILIAR: Extrair data do Map
-    private LocalDateTime extrairData(Object dataObj) {
-        if (dataObj == null) {
-            return LocalDateTime.now();
-        }
-
-        String dataString = dataObj.toString();
-        System.out.println("📅 DEBUG DATA - String recebida: '" + dataString + "'");
-
-        try {
-            return LocalDateTime.parse(dataString);
-        } catch (Exception e1) {
-            try {
-                return LocalDateTime.parse(dataString + ":00");
-            } catch (Exception e2) {
-                System.out.println("⚠️ DEBUG DATA - Erro no parse, usando data atual");
-                return LocalDateTime.now();
-            }
-        }
-    }
-
-    // ✅ MÉTODO AUXILIAR: Extrair Double com valor padrão
-    private Double getDoubleValue(Object value, Double defaultValue) {
-        if (value == null) {
-            return defaultValue;
-        }
-        try {
-            return Double.valueOf(value.toString());
-        } catch (NumberFormatException e) {
-            return defaultValue;
-        }
-    }
-
-    // ✅✅✅ ATUALIZADO: PUT - Atualizar venda existente DO USUÁRIO (SIMPLIFICADO)
-    @PutMapping("/{id}")
-    public ResponseEntity<?> atualizarVenda(@PathVariable Long id, @RequestBody Map<String, Object> vendaData) {
-        try {
-            User currentUser = getCurrentUser();
-
-            // ✅ 1️⃣ BUSCAR VENDA EXISTENTE
-            Optional<Venda> vendaExistenteOpt = vendaRepository.findByIdAndUser(id, currentUser);
-            if (!vendaExistenteOpt.isPresent()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            Venda vendaExistente = vendaExistenteOpt.get();
-
-            // ✅ 2️⃣ VERIFICAR SE JÁ EXISTE OUTRA VENDA COM MESMO ID DO PEDIDO
-            if (vendaData.containsKey("idPedido")) {
-                String novoIdPedido = vendaData.get("idPedido").toString();
-                Optional<Venda> vendaComMesmoPedido = vendaRepository.findByIdPedidoAndUser(novoIdPedido, currentUser);
-                if (vendaComMesmoPedido.isPresent() && !vendaComMesmoPedido.get().getId().equals(id)) {
-                    return ResponseEntity.badRequest().body("Já existe outra venda com este ID do pedido");
-                }
-                vendaExistente.setIdPedido(novoIdPedido);
-            }
-
-            // ✅ 3️⃣ ATUALIZAR APENAS CAMPOS PERMITIDOS (NÃO PERMITE ALTERAR PRODUTOS)
-            if (vendaData.containsKey("data")) {
-                vendaExistente.setData(extrairData(vendaData.get("data")));
-            }
-            if (vendaData.containsKey("plataforma")) {
-                vendaExistente.setPlataforma(vendaData.get("plataforma").toString());
-            }
-            if (vendaData.containsKey("precoVenda")) {
-                vendaExistente.setPrecoVenda(Double.valueOf(vendaData.get("precoVenda").toString()));
-            }
-            if (vendaData.containsKey("fretePagoPeloCliente")) {
-                vendaExistente.setFretePagoPeloCliente(getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0));
-            }
-            if (vendaData.containsKey("custoEnvio")) {
-                vendaExistente.setCustoEnvio(getDoubleValue(vendaData.get("custoEnvio"), 0.0));
-            }
-            if (vendaData.containsKey("tarifaPlataforma")) {
-                vendaExistente.setTarifaPlataforma(getDoubleValue(vendaData.get("tarifaPlataforma"), 0.0));
-            }
-            if (vendaData.containsKey("despesasOperacionais")) {
-                vendaExistente.setDespesasOperacionais(getDoubleValue(vendaData.get("despesasOperacionais"), 0.0));
-            }
-
-            // ✅ 4️⃣ SALVAR VENDA ATUALIZADA
-            Venda vendaSalva = vendaRepository.save(vendaExistente);
-
-            return ResponseEntity.ok(new VendaDTO(vendaSalva));
-
-        } catch (Exception e) {
-            System.out.println("❌ Erro ao atualizar venda: " + e.getMessage());
-            return ResponseEntity.badRequest().body("Erro ao atualizar venda: " + e.getMessage());
-        }
-    }
-
-    // ✅ ATUALIZADO: DELETE - Excluir venda com reversão de estoque DO USUÁRIO
-    @DeleteMapping("/{id}")
-    public ResponseEntity<?> excluirVenda(@PathVariable Long id) {
-        try {
-            User currentUser = getCurrentUser();
-
-            Optional<Venda> vendaOpt = vendaRepository.findByIdAndUser(id, currentUser);
-            if (!vendaOpt.isPresent()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            Venda venda = vendaOpt.get();
-
-            // ✅ REVERTER ESTOQUE BASEADO NOS ITENS RASTREADOS
-            estoqueService.reverterEstoqueVenda(venda);
-
-            // Excluir a venda
-            vendaRepository.deleteById(id);
-
-            System.out.println("✅ Venda excluída e estoque revertido: " + venda.getIdPedido());
-            return ResponseEntity.noContent().build();
-
-        } catch (Exception e) {
-            System.out.println("❌ Erro ao reverter estoque na exclusão da venda: " + e.getMessage());
-            return ResponseEntity.badRequest().body("Erro ao excluir venda: " + e.getMessage());
-        }
-    }
-
-    // ✅ ATUALIZADO: GET - Buscar venda por Plataforma DO USUÁRIO - AGORA COM DTO
-    @GetMapping("/plataforma/{plataforma}")
-    public ResponseEntity<?> buscarPorPlataforma(@PathVariable String plataforma) {
-        try {
-            User currentUser = getCurrentUser();
-            List<Venda> vendas = vendaRepository.findByPlataformaAndUser(plataforma, currentUser);
-
-            List<VendaDTO> vendasDTO = vendas.stream()
-                    .map(VendaDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(vendasDTO);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao buscar vendas por plataforma: " + e.getMessage());
-        }
-    }
-
-    @GetMapping("/periodo")
-    public ResponseEntity<?> buscarPorPeriodo(
-            @RequestParam LocalDateTime inicio,
-            @RequestParam LocalDateTime fim) {
-        try {
-            User currentUser = getCurrentUser();
-            List<Venda> vendas = vendaRepository.findByDataBetweenAndUser(inicio, fim, currentUser);
-
-            List<VendaDTO> vendasDTO = vendas.stream()
-                    .map(VendaDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(vendasDTO);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao buscar vendas por período: " + e.getMessage());
-        }
-    }
-
-    // ✅✅✅ ATUALIZADO: GET - Buscar venda por nome DO USUÁRIO - AGORA USANDO O NOVO MÉTODO
-    @GetMapping("/produto/{nome}")
-    public ResponseEntity<?> buscarPorNomeProduto(@PathVariable String nome) {
-        try {
-            User currentUser = getCurrentUser();
-
-            // 1. Buscar produtos com nome similar
-            List<Produto> produtos = produtoRepository.findByNomeContainingAndUser(nome, currentUser);
-
-            if (produtos.isEmpty()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            // ✅ 2. USANDO O NOVO MÉTODO: Buscar vendas que contenham algum desses produtos
-            List<Venda> vendasEncontradas = new ArrayList<>();
-            for (Produto produto : produtos) {
-                // ✅ USA O NOVO MÉTODO findByProdutoInItens() do VendaRepository
-                vendasEncontradas.addAll(vendaRepository.findByProdutoInItens(produto, currentUser));
-            }
-
-            // Remover duplicatas (uma venda pode conter múltiplos produtos)
-            List<Venda> vendasUnicas = vendasEncontradas.stream()
-                    .distinct()
-                    .collect(Collectors.toList());
-
-            List<VendaDTO> vendasDTO = vendasUnicas.stream()
-                    .map(VendaDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(vendasDTO);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao buscar vendas por nome do produto: " + e.getMessage());
-        }
-    }
-
-    @GetMapping("/{id}/calculos")
-    public ResponseEntity<?> getCalculos(@PathVariable Long id) {
-        try {
-            User currentUser = getCurrentUser();
-            Optional<Venda> vendaOpt = vendaRepository.findByIdAndUser(id, currentUser);
-            if (!vendaOpt.isPresent()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            Venda venda = vendaOpt.get();
-            Map<String, Double> calculos = new HashMap<>();
-            calculos.put("faturamento", venda.calcularFaturamento());
-            calculos.put("custoEfetivoTotal", venda.calcularCustoEfetivoTotal());
-            calculos.put("lucroBruto", venda.calcularLucroBruto());
-            calculos.put("lucroLiquido", venda.calcularLucroLiquido());
-            calculos.put("roi", venda.calcularROI());
-            calculos.put("despesasOperacionais", venda.getDespesasOperacionais());
-
-            return ResponseEntity.ok(calculos);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular métricas da venda: " + e.getMessage());
-        }
-    }
-
-    @GetMapping("/resumo-mensal")
-    public ResponseEntity<?> resumoMensal(@RequestParam int mes, @RequestParam int ano) {
-        try {
-            User currentUser = getCurrentUser();
-            LocalDateTime inicio = LocalDateTime.of(ano, mes, 1, 0, 0, 0);
-            LocalDateTime fim = LocalDateTime.of(ano, mes, 1, 23, 59, 59)
-                    .plusMonths(1)
-                    .minusDays(1);
-
-            List<Venda> vendas = vendaRepository.findByDataBetweenAndUser(inicio, fim, currentUser);
-
-            List<VendaDTO> vendasDTO = vendas.stream()
-                    .map(VendaDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(vendasDTO);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao buscar resumo mensal: " + e.getMessage());
-        }
-    }
-
-    @GetMapping("/pedido/{idPedido}")
-    public ResponseEntity<?> buscarPorIdPedido(@PathVariable String idPedido) {
-        try {
-            User currentUser = getCurrentUser();
-            Optional<Venda> venda = vendaRepository.findByIdPedidoAndUser(idPedido, currentUser);
-            return venda.map(v -> ResponseEntity.ok(new VendaDTO(v)))
-                    .orElseGet(() -> ResponseEntity.notFound().build());
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao buscar venda por ID do pedido: " + e.getMessage());
         }
     }
 }
