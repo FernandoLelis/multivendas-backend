@@ -1,11 +1,11 @@
 package com.fernando.erp_vendas.controller;
 
-import com.fernando.erp_vendas.dto.EntradaEstoqueDTO;
-import com.fernando.erp_vendas.model.EntradaEstoque;
-import com.fernando.erp_vendas.model.Produto;
-import com.fernando.erp_vendas.model.User;
+import com.fernando.erp_vendas.dto.CompraDTO;
+import com.fernando.erp_vendas.model.*;
 import com.fernando.erp_vendas.repository.EntradaEstoqueRepository;
 import com.fernando.erp_vendas.repository.ProdutoRepository;
+import com.fernando.erp_vendas.repository.CompraRepository;
+import com.fernando.erp_vendas.repository.ItemCompraRepository;
 import com.fernando.erp_vendas.service.EstoqueService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -16,8 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -31,6 +30,12 @@ public class EntradaEstoqueController {
     private ProdutoRepository produtoRepository;
 
     @Autowired
+    private CompraRepository compraRepository;
+
+    @Autowired
+    private ItemCompraRepository itemCompraRepository;
+
+    @Autowired
     private EstoqueService estoqueService;
 
     // 🆕 MÉTODO PARA OBTER USUÁRIO LOGADO
@@ -42,6 +47,316 @@ public class EntradaEstoqueController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
+    // ============================================================
+    // ✅✅✅ NOVA VERSÃO: COMPRAS COM MÚLTIPLOS PRODUTOS
+    // ============================================================
+
+    // ✅✅✅ NOVO: POST - Criar nova COMPRA com múltiplos produtos
+    @PostMapping("/compra")
+    public ResponseEntity<?> criarCompra(@RequestBody Map<String, Object> compraData) {
+        try {
+            System.out.println("🔍 DEBUG COMPRA - Dados recebidos: " + compraData);
+
+            User currentUser = getCurrentUser();
+
+            // ✅ 1️⃣ VALIDAR DADOS OBRIGATÓRIOS
+            if (!compraData.containsKey("idPedidoCompra") || !compraData.containsKey("fornecedor") ||
+                    !compraData.containsKey("itens")) {
+                return ResponseEntity.badRequest().body("Dados incompletos. Campos obrigatórios: idPedidoCompra, fornecedor, itens");
+            }
+
+            // ✅ 2️⃣ EXTRAIR DADOS BÁSICOS DA COMPRA
+            String idPedidoCompra = compraData.get("idPedidoCompra").toString();
+            String fornecedor = compraData.get("fornecedor").toString();
+            String observacoes = compraData.containsKey("observacoes") ? compraData.get("observacoes").toString() : "";
+
+            // ✅✅✅ EXTRAIR E VALIDAR DATA
+            LocalDateTime dataCompra = extrairData(compraData.get("data"));
+            if (dataCompra == null) {
+                dataCompra = LocalDateTime.now(); // Usar data atual se não informada
+            }
+
+            // ✅ 3️⃣ VALIDAR E EXTRAIR ITENS DA COMPRA
+            List<Map<String, Object>> itensData = (List<Map<String, Object>>) compraData.get("itens");
+
+            System.out.println("🔍 DEBUG ITENS COMPRA - Tamanho: " + (itensData != null ? itensData.size() : "null"));
+
+            if (itensData == null || itensData.isEmpty()) {
+                return ResponseEntity.badRequest().body("A compra deve conter pelo menos um produto");
+            }
+
+            // ✅ DEBUG DETALHADO DE CADA ITEM
+            for (int i = 0; i < itensData.size(); i++) {
+                Map<String, Object> item = itensData.get(i);
+                System.out.println("🔍 DEBUG ITEM COMPRA " + i + ": " + item);
+
+                if (!item.containsKey("produtoId") || item.get("produtoId") == null) {
+                    return ResponseEntity.badRequest().body("Item " + i + " não contém produtoId");
+                }
+                if (!item.containsKey("quantidade") || item.get("quantidade") == null) {
+                    return ResponseEntity.badRequest().body("Item " + i + " não contém quantidade");
+                }
+                if (!item.containsKey("custoUnitario") || item.get("custoUnitario") == null) {
+                    return ResponseEntity.badRequest().body("Item " + i + " não contém custoUnitario");
+                }
+            }
+
+            // ✅ 4️⃣ VERIFICAR SE JÁ EXISTE COMPRA COM MESMO ID DO PEDIDO
+            if (compraRepository.findByIdPedidoCompraAndUser(idPedidoCompra, currentUser).isPresent()) {
+                return ResponseEntity.badRequest().body("Já existe uma compra com este ID do pedido: " + idPedidoCompra);
+            }
+
+            // ✅ 5️⃣ CRIAR A COMPRA
+            Compra compra = new Compra();
+            compra.setData(dataCompra);
+            compra.setIdPedidoCompra(idPedidoCompra);
+            compra.setFornecedor(fornecedor);
+            compra.setObservacoes(observacoes);
+            compra.setUser(currentUser);
+
+            // ✅ 6️⃣ CRIAR ITENS DA COMPRA E VERIFICAR PRODUTOS
+            List<ItemCompra> itens = new ArrayList<>();
+            for (Map<String, Object> itemData : itensData) {
+                Long produtoId = Long.valueOf(itemData.get("produtoId").toString());
+                Integer quantidade = Integer.valueOf(itemData.get("quantidade").toString());
+                BigDecimal custoUnitario = new BigDecimal(itemData.get("custoUnitario").toString());
+
+                // ✅ VERIFICAR SE O PRODUTO EXISTE E PERTENCE AO USUÁRIO
+                Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
+                if (!produtoOpt.isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body("Produto não encontrado ou não pertence ao usuário: ID " + produtoId);
+                }
+                Produto produto = produtoOpt.get();
+
+                // ✅ CRIAR ITEM DA COMPRA
+                ItemCompra item = new ItemCompra(compra, produto, quantidade, custoUnitario, currentUser);
+
+                // ✅ CRIAR O LOTE (EntradaEstoque) automaticamente
+                item.criarLote();
+
+                itens.add(item);
+            }
+
+            // ✅ 7️⃣ ADICIONAR ITENS À COMPRA
+            compra.setItens(itens);
+
+            // ✅ 8️⃣ SALVAR COMPRA (cascade salvará os itens e lotes)
+            Compra compraSalva = compraRepository.save(compra);
+
+            // ✅ 9️⃣ BUSCAR COMPRA COMPLETA (COM ITENS E LOTES PERSISTIDOS)
+            Optional<Compra> compraCompleta = compraRepository.findByIdPedidoCompraAndUser(idPedidoCompra, currentUser);
+            if (!compraCompleta.isPresent()) {
+                throw new RuntimeException("Erro ao recuperar compra criada: " + idPedidoCompra);
+            }
+
+            System.out.println("✅ Compra criada com sucesso: " + compraCompleta.get().getIdPedidoCompra() +
+                    ", Data: " + compraCompleta.get().getData() +
+                    ", Total produtos: " + compraCompleta.get().getItens().size());
+
+            return ResponseEntity.ok(new CompraDTO(compraCompleta.get()));
+
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body("Erro de formato numérico: " + e.getMessage());
+        } catch (ClassCastException e) {
+            return ResponseEntity.badRequest().body("Erro de tipo de dados: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("❌ Erro ao criar compra: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao criar compra: " + e.getMessage());
+        }
+    }
+
+    // ✅✅✅ NOVO: Método para extrair data (compatível com VendaController)
+    private LocalDateTime extrairData(Object dataObj) {
+        if (dataObj == null || dataObj.toString().isEmpty()) {
+            return null;
+        }
+
+        String dataString = dataObj.toString().trim();
+        System.out.println("📅 DEBUG DATA COMPRA - String recebida: '" + dataString + "'");
+
+        try {
+            // ✅ FORMATO ESPERADO: "YYYY-MM-DD" (apenas data, sem hora)
+            java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString);
+            return dataApenas.atStartOfDay();
+        } catch (Exception e1) {
+            try {
+                // ✅ Se vier com formato ISO: "YYYY-MM-DDTHH:mm:ss"
+                if (dataString.contains("T")) {
+                    return java.time.LocalDateTime.parse(dataString);
+                } else {
+                    java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+                    return dataApenas.atStartOfDay();
+                }
+            } catch (Exception e2) {
+                try {
+                    // ✅ Tentar formato com espaço: "YYYY-MM-DD HH:mm:ss"
+                    String comT = dataString.replace(" ", "T");
+                    return java.time.LocalDateTime.parse(comT);
+                } catch (Exception e3) {
+                    System.out.println("❌ ERRO DATA COMPRA - Formato inválido: " + dataString);
+                    return null;
+                }
+            }
+        }
+    }
+
+    // ✅✅✅ NOVO: PUT - Atualizar compra existente DO USUÁRIO
+    @PutMapping("/compra/{id}")
+    public ResponseEntity<?> atualizarCompra(@PathVariable Long id, @RequestBody Map<String, Object> compraData) {
+        try {
+            User currentUser = getCurrentUser();
+
+            // ✅ 1️⃣ BUSCAR COMPRA EXISTENTE
+            Optional<Compra> compraExistenteOpt = compraRepository.findByIdAndUser(id, currentUser);
+            if (!compraExistenteOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Compra compraExistente = compraExistenteOpt.get();
+
+            // ✅ 2️⃣ VERIFICAR SE JÁ EXISTE OUTRA COMPRA COM MESMO ID DO PEDIDO
+            if (compraData.containsKey("idPedidoCompra")) {
+                String novoIdPedidoCompra = compraData.get("idPedidoCompra").toString();
+                Optional<Compra> compraComMesmoPedido = compraRepository.findByIdPedidoCompraAndUser(novoIdPedidoCompra, currentUser);
+                if (compraComMesmoPedido.isPresent() && !compraComMesmoPedido.get().getId().equals(id)) {
+                    return ResponseEntity.badRequest().body("Já existe outra compra com este ID do pedido");
+                }
+                compraExistente.setIdPedidoCompra(novoIdPedidoCompra);
+            }
+
+            // ✅ 3️⃣ ATUALIZAR APENAS CAMPOS PERMITIDOS
+            if (compraData.containsKey("data")) {
+                LocalDateTime novaData = extrairData(compraData.get("data"));
+                if (novaData != null) {
+                    compraExistente.setData(novaData);
+                }
+            }
+            if (compraData.containsKey("fornecedor")) {
+                compraExistente.setFornecedor(compraData.get("fornecedor").toString());
+            }
+            if (compraData.containsKey("observacoes")) {
+                compraExistente.setObservacoes(compraData.get("observacoes").toString());
+            }
+
+            // ✅ 4️⃣ SALVAR COMPRA ATUALIZADA
+            Compra compraSalva = compraRepository.save(compraExistente);
+
+            return ResponseEntity.ok(new CompraDTO(compraSalva));
+
+        } catch (Exception e) {
+            System.out.println("❌ Erro ao atualizar compra: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Erro ao atualizar compra: " + e.getMessage());
+        }
+    }
+
+    // ✅✅✅ NOVO: DELETE - Excluir compra com validação DO USUÁRIO
+    @DeleteMapping("/compra/{id}")
+    public ResponseEntity<?> excluirCompra(@PathVariable Long id) {
+        try {
+            User currentUser = getCurrentUser();
+
+            Optional<Compra> compraOpt = compraRepository.findByIdAndUser(id, currentUser);
+            if (!compraOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Compra compra = compraOpt.get();
+
+            // ✅ VERIFICAR SE ALGUM LOTE FOI CONSUMIDO (não pode excluir se já vendeu)
+            for (ItemCompra item : compra.getItens()) {
+                if (item.getLote() != null && item.getLote().getSaldo() < item.getLote().getQuantidade()) {
+                    return ResponseEntity.badRequest()
+                            .body("Não é possível excluir compra: lote " + item.getLote().getId() +
+                                    " já foi parcialmente consumido. Saldo atual: " +
+                                    item.getLote().getSaldo() + "/" + item.getLote().getQuantidade());
+                }
+            }
+
+            // ✅ EXCLUIR COMPRA (cascade excluirá itens e lotes)
+            compraRepository.delete(compra);
+
+            System.out.println("✅ Compra excluída: " + compra.getIdPedidoCompra());
+            return ResponseEntity.noContent().build();
+
+        } catch (Exception e) {
+            System.out.println("❌ Erro ao excluir compra: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Erro ao excluir compra: " + e.getMessage());
+        }
+    }
+
+    // ✅✅✅ NOVO: GET - Listar todas as compras DO USUÁRIO
+    @GetMapping("/compras")
+    public ResponseEntity<?> listarTodasCompras() {
+        try {
+            User currentUser = getCurrentUser();
+            System.out.println("🔍 DEBUG COMPRAS - Buscando compras para usuário: " + currentUser.getEmail());
+
+            List<Compra> compras = compraRepository.findByUserOrderByDataDesc(currentUser);
+            System.out.println("📊 DEBUG COMPRAS - Total de compras encontradas: " + compras.size());
+
+            // ✅ CONVERTER PARA DTO
+            List<CompraDTO> comprasDTO = compras.stream()
+                    .map(CompraDTO::new)
+                    .collect(Collectors.toList());
+
+            System.out.println("✅ Compras convertidas para DTO: " + comprasDTO.size());
+            return ResponseEntity.ok(comprasDTO);
+        } catch (Exception e) {
+            System.out.println("❌ ERRO CRÍTICO em listarTodasCompras: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao listar compras: " + e.getMessage());
+        }
+    }
+
+    // ✅✅✅ NOVO: GET - Buscar compra por ID DO USUÁRIO
+    @GetMapping("/compra/{id}")
+    public ResponseEntity<?> buscarCompraPorId(@PathVariable Long id) {
+        try {
+            User currentUser = getCurrentUser();
+            Optional<Compra> compra = compraRepository.findByIdAndUser(id, currentUser);
+            return compra.map(c -> ResponseEntity.ok(new CompraDTO(c)))
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar compra: " + e.getMessage());
+        }
+    }
+
+    // ✅✅✅ NOVO: GET - Buscar compra por ID do Pedido DO USUÁRIO
+    @GetMapping("/compra/pedido/{idPedidoCompra}")
+    public ResponseEntity<?> buscarCompraPorIdPedido(@PathVariable String idPedidoCompra) {
+        try {
+            User currentUser = getCurrentUser();
+            Optional<Compra> compra = compraRepository.findByIdPedidoCompraAndUser(idPedidoCompra, currentUser);
+            return compra.map(c -> ResponseEntity.ok(new CompraDTO(c)))
+                    .orElseGet(() -> ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar compra por ID do pedido: " + e.getMessage());
+        }
+    }
+
+    // ✅✅✅ NOVO: GET - Buscar compras por fornecedor DO USUÁRIO
+    @GetMapping("/compras/fornecedor/{fornecedor}")
+    public ResponseEntity<?> buscarComprasPorFornecedor(@PathVariable String fornecedor) {
+        try {
+            User currentUser = getCurrentUser();
+            List<Compra> compras = compraRepository.findByFornecedorContainingAndUser(fornecedor, currentUser);
+
+            List<CompraDTO> comprasDTO = compras.stream()
+                    .map(CompraDTO::new)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(comprasDTO);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao buscar compras por fornecedor: " + e.getMessage());
+        }
+    }
+
+    // ============================================================
+    // ✅✅✅ MÉTODOS LEGACY (MANTIDOS PARA COMPATIBILIDADE)
+    // ============================================================
+
     // ✅ CORRIGIDO: Registrar nova entrada de estoque (COMPRA) PARA O USUÁRIO COM DATA
     @PostMapping("/entrada")
     public ResponseEntity<?> registrarEntrada(
@@ -52,7 +367,7 @@ public class EntradaEstoqueController {
             @RequestParam String idPedidoCompra,
             @RequestParam String categoria,
             @RequestParam(required = false) String observacoes,
-            @RequestParam(required = false) String dataEntrada) { // ✅ NOVO: parâmetro dataEntrada
+            @RequestParam(required = false) String dataEntrada) {
 
         try {
             User currentUser = getCurrentUser();
@@ -99,27 +414,7 @@ public class EntradaEstoqueController {
                 }
             }
 
-            // ✅ CORREÇÃO: CALCULAR CUSTO UNITÁRIO AUTOMATICAMENTE
-            if (quantidade != null && quantidade > 0) {
-                try {
-                    BigDecimal custoUnitario = custoTotal.divide(
-                            BigDecimal.valueOf(quantidade),
-                            2,
-                            java.math.RoundingMode.HALF_UP
-                    );
-                    entrada.setCustoUnitario(custoUnitario);
-                } catch (ArithmeticException e) {
-                    double custoUnitarioDouble = custoTotal.doubleValue() / quantidade;
-                    entrada.setCustoUnitario(BigDecimal.valueOf(custoUnitarioDouble)
-                            .setScale(2, java.math.RoundingMode.HALF_UP));
-                }
-            }
-
-            // ✅ CORREÇÃO: DEFINIR SALDO INICIAL
-            entrada.setSaldo(quantidade);
-
             EntradaEstoque entradaSalva = entradaEstoqueRepository.save(entrada);
-
             return ResponseEntity.ok(entradaSalva);
 
         } catch (DataIntegrityViolationException e) {
@@ -141,7 +436,7 @@ public class EntradaEstoqueController {
             @RequestParam String idPedidoCompra,
             @RequestParam String categoria,
             @RequestParam(required = false) String observacoes,
-            @RequestParam(required = false) String dataEntrada) { // ✅ NOVO: parâmetro dataEntrada
+            @RequestParam(required = false) String dataEntrada) {
 
         try {
             User currentUser = getCurrentUser();
@@ -235,65 +530,13 @@ public class EntradaEstoqueController {
         }
     }
 
-    // 🆕 MÉTODO TEMPORÁRIO: LIMPAR DADOS INCONSISTENTES (executar UMA vez via POSTMAN)
-    @PostMapping("/limpar-dados-inconsistentes")
-    public ResponseEntity<?> limparDadosInconsistentes() {
-        try {
-            User currentUser = getCurrentUser();
-
-            // 1. Buscar todas as entradas no sistema (apenas para análise)
-            List<EntradaEstoque> todasEntradas = entradaEstoqueRepository.findAll();
-
-            // 2. Encontrar entradas sem usuário (dados antigos)
-            List<EntradaEstoque> entradasSemUsuario = todasEntradas.stream()
-                    .filter(e -> e.getUser() == null)
-                    .collect(Collectors.toList());
-
-            // 3. Encontrar entradas de outros usuários que podem causar conflito
-            List<EntradaEstoque> entradasOutrosUsuarios = todasEntradas.stream()
-                    .filter(e -> e.getUser() != null && !e.getUser().getId().equals(currentUser.getId()))
-                    .collect(Collectors.toList());
-
-            // 4. Deletar apenas entradas SEM usuário E SEM vendas associadas
-            int entradasDeletadas = 0;
-            for (EntradaEstoque entrada : entradasSemUsuario) {
-                if (entrada.getItensVenda() == null || entrada.getItensVenda().isEmpty()) {
-                    entradaEstoqueRepository.delete(entrada);
-                    entradasDeletadas++;
-                }
-            }
-
-            return ResponseEntity.ok(String.format(
-                    "🔧 LIMPEZA DE DADOS CONCLUÍDA:\n" +
-                            "• Total de entradas no sistema: %d\n" +
-                            "• Entradas sem usuário: %d\n" +
-                            "• Entradas de outros usuários: %d\n" +
-                            "• Entradas deletadas (sem usuário e sem vendas): %d\n\n" +
-                            "💡 DICA: Entradas de outros usuários NÃO são deletadas para manter a integridade multi-tenant.",
-                    todasEntradas.size(),
-                    entradasSemUsuario.size(),
-                    entradasOutrosUsuarios.size(),
-                    entradasDeletadas
-            ));
-
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("❌ Erro na limpeza: " + e.getMessage());
-        }
-    }
-
-    // ✅ ATUALIZADO: Listar todas as entradas de estoque (COMPRAS) DO USUÁRIO - AGORA COM DTO
+    // ✅ ATUALIZADO: Listar todas as entradas de estoque (COMPRAS) DO USUÁRIO
     @GetMapping("/entradas")
     public ResponseEntity<?> listarTodasEntradas() {
         try {
             User currentUser = getCurrentUser();
             List<EntradaEstoque> entradas = entradaEstoqueRepository.findByUserOrderByDataEntradaDesc(currentUser);
-
-            // ✅ CONVERTER PARA DTO
-            List<EntradaEstoqueDTO> entradasDTO = entradas.stream()
-                    .map(EntradaEstoqueDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(entradasDTO);
+            return ResponseEntity.ok(entradas);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao listar compras: " + e.getMessage());
         }
@@ -310,13 +553,7 @@ public class EntradaEstoqueController {
                     .orElseThrow(() -> new RuntimeException("Produto não encontrado ou não pertence ao usuário"));
 
             List<EntradaEstoque> entradas = entradaEstoqueRepository.findByProdutoAndUserOrderByDataEntradaAsc(produto, currentUser);
-
-            // ✅ CONVERTER PARA DTO
-            List<EntradaEstoqueDTO> entradasDTO = entradas.stream()
-                    .map(EntradaEstoqueDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(entradasDTO);
+            return ResponseEntity.ok(entradas);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao listar compras do produto: " + e.getMessage());
         }
@@ -378,9 +615,7 @@ public class EntradaEstoqueController {
                                 "Exclua as VENDAS que utilizaram este lote primeiro para liberar a exclusão.");
             }
 
-            // ✅ CORRETO: No PEPS, apenas excluímos o lote se estiver intacto
             entradaEstoqueRepository.delete(entrada);
-
             return ResponseEntity.ok().build();
 
         } catch (Exception e) {
@@ -390,11 +625,11 @@ public class EntradaEstoqueController {
 
     // 🆕 GET - Buscar entrada por ID DO USUÁRIO
     @GetMapping("/entrada/{id}")
-    public ResponseEntity<?> buscarPorId(@PathVariable Long id) {
+    public ResponseEntity<?> buscarEntradaPorId(@PathVariable Long id) {
         try {
             User currentUser = getCurrentUser();
             Optional<EntradaEstoque> entrada = entradaEstoqueRepository.findByIdAndUser(id, currentUser);
-            return entrada.map(ent -> ResponseEntity.ok(new EntradaEstoqueDTO(ent)))
+            return entrada.map(ResponseEntity::ok)
                     .orElseGet(() -> ResponseEntity.notFound().build());
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao buscar compra: " + e.getMessage());
@@ -407,13 +642,7 @@ public class EntradaEstoqueController {
         try {
             User currentUser = getCurrentUser();
             List<EntradaEstoque> entradas = entradaEstoqueRepository.findByCategoriaAndUser(categoria, currentUser);
-
-            // ✅ CONVERTER PARA DTO
-            List<EntradaEstoqueDTO> entradasDTO = entradas.stream()
-                    .map(EntradaEstoqueDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(entradasDTO);
+            return ResponseEntity.ok(entradas);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao buscar compras por categoria: " + e.getMessage());
         }
@@ -425,13 +654,7 @@ public class EntradaEstoqueController {
         try {
             User currentUser = getCurrentUser();
             List<EntradaEstoque> entradas = entradaEstoqueRepository.findByFornecedorContainingAndUser(fornecedor, currentUser);
-
-            // ✅ CONVERTER PARA DTO
-            List<EntradaEstoqueDTO> entradasDTO = entradas.stream()
-                    .map(EntradaEstoqueDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(entradasDTO);
+            return ResponseEntity.ok(entradas);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao buscar compras por fornecedor: " + e.getMessage());
         }
@@ -443,15 +666,43 @@ public class EntradaEstoqueController {
         try {
             User currentUser = getCurrentUser();
             List<EntradaEstoque> entradas = entradaEstoqueRepository.findEntradasComSaldoBaixo(currentUser);
-
-            // ✅ CONVERTER PARA DTO
-            List<EntradaEstoqueDTO> entradasDTO = entradas.stream()
-                    .map(EntradaEstoqueDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(entradasDTO);
+            return ResponseEntity.ok(entradas);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao buscar compras com saldo baixo: " + e.getMessage());
+        }
+    }
+
+    // 🆕 POST - Limpar dados inconsistentes (mantido para compatibilidade)
+    @PostMapping("/limpar-dados-inconsistentes")
+    public ResponseEntity<?> limparDadosInconsistentes() {
+        try {
+            User currentUser = getCurrentUser();
+
+            List<EntradaEstoque> todasEntradas = entradaEstoqueRepository.findAll();
+            List<EntradaEstoque> entradasSemUsuario = todasEntradas.stream()
+                    .filter(e -> e.getUser() == null)
+                    .collect(Collectors.toList());
+
+            int entradasDeletadas = 0;
+            for (EntradaEstoque entrada : entradasSemUsuario) {
+                if (entrada.getItensVenda() == null || entrada.getItensVenda().isEmpty()) {
+                    entradaEstoqueRepository.delete(entrada);
+                    entradasDeletadas++;
+                }
+            }
+
+            return ResponseEntity.ok(String.format(
+                    "🔧 LIMPEZA DE DADOS CONCLUÍDA:\n" +
+                            "• Total de entradas no sistema: %d\n" +
+                            "• Entradas sem usuário: %d\n" +
+                            "• Entradas deletadas (sem usuário e sem vendas): %d",
+                    todasEntradas.size(),
+                    entradasSemUsuario.size(),
+                    entradasDeletadas
+            ));
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("❌ Erro na limpeza: " + e.getMessage());
         }
     }
 }

@@ -28,7 +28,9 @@ public class ItemCompra {
     @Column(name = "custo_total", nullable = false, precision = 10, scale = 2)
     private BigDecimal custoTotal;
 
-    @OneToOne(mappedBy = "itemCompra", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    // ✅ CORRETO: Lado DONO do relacionamento com EntradaEstoque
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JoinColumn(name = "entrada_estoque_id", unique = true)
     private EntradaEstoque lote;  // Lote criado a partir deste item
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -48,6 +50,13 @@ public class ItemCompra {
         this.custoUnitario = custoUnitario;
         this.custoTotal = custoUnitario.multiply(BigDecimal.valueOf(quantidade));
         this.user = user;
+    }
+
+    // Método auxiliar para criar e associar o lote
+    public void criarLote() {
+        if (this.lote == null) {
+            this.lote = new EntradaEstoque(this);
+        }
     }
 
     // Getters e Setters
@@ -132,6 +141,7 @@ public class ItemCompra {
                 ", quantidade=" + quantidade +
                 ", custoUnitario=" + custoUnitario +
                 ", custoTotal=" + custoTotal +
+                ", temLote=" + (lote != null ? "Sim" : "Não") +
                 ", userId=" + (user != null ? user.getId() : "null") +
                 '}';
     }

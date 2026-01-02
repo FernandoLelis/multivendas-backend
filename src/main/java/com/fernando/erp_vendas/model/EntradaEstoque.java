@@ -8,9 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "entrada_estoque", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"id_pedido_compra", "user_id"})
-})
+@Table(name = "entrada_estoque") // ✅ REMOVIDA: constraint única (id_pedido_compra, user_id)
 public class EntradaEstoque {
 
     @Id
@@ -60,9 +58,8 @@ public class EntradaEstoque {
     @JsonIgnore
     private List<ItemVenda> itensVenda = new ArrayList<>();
 
-    // 🆕 NOVO: Relacionamento com ItemCompra (FASE 45)
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "item_compra_id")
+    // ✅ CORRETO: Lado INVERSO do relacionamento (mappedBy aponta para campo em ItemCompra)
+    @OneToOne(mappedBy = "lote", fetch = FetchType.LAZY)
     @JsonIgnore
     private ItemCompra itemCompra;
 
@@ -102,7 +99,7 @@ public class EntradaEstoque {
         }
     }
 
-    // 🆕 CONSTRUTOR PARA CRIAR LOTES A PARTIR DE ITEMCOMPRA
+    // ✅ CONSTRUTOR PARA CRIAR LOTES A PARTIR DE ITEMCOMPRA
     public EntradaEstoque(ItemCompra itemCompra) {
         this.produto = itemCompra.getProduto();
         this.quantidade = itemCompra.getQuantidade();
@@ -112,7 +109,6 @@ public class EntradaEstoque {
         this.fornecedor = itemCompra.getCompra().getFornecedor();
         this.idPedidoCompra = itemCompra.getCompra().getIdPedidoCompra();
         this.user = itemCompra.getUser();
-        this.itemCompra = itemCompra;
         this.dataEntrada = itemCompra.getCompra().getData();
 
         // Se houver observações na compra, copia para o lote
@@ -161,11 +157,29 @@ public class EntradaEstoque {
     public List<ItemVenda> getItensVenda() { return itensVenda; }
     public void setItensVenda(List<ItemVenda> itensVenda) { this.itensVenda = itensVenda; }
 
-    // 🆕 Getter e Setter para ItemCompra
+    // ✅ Getter e Setter para ItemCompra
     public ItemCompra getItemCompra() { return itemCompra; }
-    public void setItemCompra(ItemCompra itemCompra) { this.itemCompra = itemCompra; }
+    public void setItemCompra(ItemCompra itemCompra) {
+        this.itemCompra = itemCompra;
+    }
 
-    // Métodos de negócio (mantenha todos)
+    // ✅ NOVO: Métodos para expor dados do produto no JSON
+    @Transient
+    public Long getProdutoId() {
+        return produto != null ? produto.getId() : null;
+    }
+
+    @Transient
+    public String getProdutoNome() {
+        return produto != null ? produto.getNome() : null;
+    }
+
+    @Transient
+    public String getProdutoSku() {
+        return produto != null ? produto.getSku() : null;
+    }
+
+    // Métodos de negócio
     public boolean baixarEstoque(Integer quantidadeBaixa) {
         if (saldo >= quantidadeBaixa) {
             saldo -= quantidadeBaixa;
@@ -195,6 +209,7 @@ public class EntradaEstoque {
                 ", fornecedor='" + fornecedor + '\'' +
                 ", idPedidoCompra='" + idPedidoCompra + '\'' +
                 ", categoria='" + categoria + '\'' +
+                ", itemCompraId=" + (itemCompra != null ? itemCompra.getId() : "null") +
                 '}';
     }
 }
