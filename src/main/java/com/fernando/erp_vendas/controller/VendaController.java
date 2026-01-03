@@ -744,4 +744,38 @@ public class VendaController {
             return ResponseEntity.badRequest().body("Erro ao buscar vendas por dia: " + e.getMessage());
         }
     }
+
+    // 🆕 ADICIONADO: Endpoints para dados do ANO ATUAL
+    @GetMapping("/faturamento-ano-atual")
+    public ResponseEntity<?> getFaturamentoAnoAtual() {
+        try {
+            User currentUser = getCurrentUser();
+            Double faturamento = vendaRepository.calcularFaturamentoAnoAtual(currentUser);
+            return ResponseEntity.ok(faturamento != null ? faturamento : 0.0);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular faturamento do ano atual: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/custo-efetivo-ano-atual")
+    public ResponseEntity<?> getCustoEfetivoAnoAtual() {
+        try {
+            User currentUser = getCurrentUser();
+            Double custoEfetivo = vendaRepository.calcularCustoEfetivoAnoAtual(currentUser);
+            return ResponseEntity.ok(custoEfetivo != null ? custoEfetivo : 0.0);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular custo efetivo do ano atual: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/lucro-bruto-ano-atual")
+    public ResponseEntity<?> getLucroBrutoAnoAtual() {
+        try {
+            User currentUser = getCurrentUser();
+            Double lucroBruto = vendaRepository.calcularLucroBrutoAnoAtual(currentUser);
+            return ResponseEntity.ok(lucroBruto != null ? lucroBruto : 0.0);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular lucro bruto do ano atual: " + e.getMessage());
+        }
+    }
 }

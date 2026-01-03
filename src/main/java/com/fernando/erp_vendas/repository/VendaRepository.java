@@ -108,6 +108,18 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     @Query("SELECT SUM(v.precoVenda + v.fretePagoPeloCliente - v.tarifaPlataforma - v.custoProdutoVendido - v.custoEnvio - v.despesasOperacionais) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE) AND MONTH(v.data) = MONTH(CURRENT_DATE)")
     Double calcularLucroLiquidoMesAtual(@Param("user") User user);
 
+    // 🆕 ADICIONADO: Calcular faturamento do ano atual DO USUÁRIO
+    @Query("SELECT SUM(v.precoVenda + v.fretePagoPeloCliente) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE)")
+    Double calcularFaturamentoAnoAtual(@Param("user") User user);
+
+    // 🆕 ADICIONADO: Calcular custo efetivo do ano atual DO USUÁRIO
+    @Query("SELECT SUM(v.custoProdutoVendido + v.custoEnvio + v.tarifaPlataforma) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE)")
+    Double calcularCustoEfetivoAnoAtual(@Param("user") User user);
+
+    // 🆕 ADICIONADO: Calcular lucro bruto do ano atual DO USUÁRIO
+    @Query("SELECT SUM(v.precoVenda + v.fretePagoPeloCliente - v.custoProdutoVendido - v.custoEnvio - v.tarifaPlataforma) FROM Venda v WHERE v.user = :user AND YEAR(v.data) = YEAR(CURRENT_DATE)")
+    Double calcularLucroBrutoAnoAtual(@Param("user") User user);
+
     // 🆕 MÉTODOS PARA QUANTIDADE DE VENDAS - MULTI-TENANCY (CORRIGIDOS PARA POSTGRESQL)
 
     // Contar vendas do mês atual DO USUÁRIO (PostgreSQL)
