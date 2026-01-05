@@ -51,7 +51,7 @@ public class EntradaEstoqueController {
     // ✅✅✅ NOVA VERSÃO: COMPRAS COM MÚLTIPLOS PRODUTOS
     // ============================================================
 
-    // ✅✅✅ NOVO: POST - Criar nova COMPRA com múltiplos produtos
+    // ✅✅✅ NOVO: POST - Criar nova COMPRA com múltiplos produtos (ATUALIZADO)
     @PostMapping("/compra")
     public ResponseEntity<?> criarCompra(@RequestBody Map<String, Object> compraData) {
         try {
@@ -70,11 +70,13 @@ public class EntradaEstoqueController {
             String fornecedor = compraData.get("fornecedor").toString();
             String observacoes = compraData.containsKey("observacoes") ? compraData.get("observacoes").toString() : "";
 
-            // ✅✅✅ EXTRAIR E VALIDAR DATA
-            LocalDateTime dataCompra = extrairData(compraData.get("data"));
+            // ✅✅✅ EXTRAIR E VALIDAR DATA (MELHORADO)
+            LocalDateTime dataCompra = extrairDataMelhorado(compraData.get("data"));
             if (dataCompra == null) {
                 dataCompra = LocalDateTime.now(); // Usar data atual se não informada
             }
+
+            System.out.println("📅 DEBUG - Data da compra extraída: " + dataCompra);
 
             // ✅ 3️⃣ VALIDAR E EXTRAIR ITENS DA COMPRA
             List<Map<String, Object>> itensData = (List<Map<String, Object>>) compraData.get("itens");
@@ -106,13 +108,10 @@ public class EntradaEstoqueController {
                 return ResponseEntity.badRequest().body("Já existe uma compra com este ID do pedido: " + idPedidoCompra);
             }
 
-            // ✅ 5️⃣ CRIAR A COMPRA
-            Compra compra = new Compra();
-            compra.setData(dataCompra);
-            compra.setIdPedidoCompra(idPedidoCompra);
-            compra.setFornecedor(fornecedor);
-            compra.setObservacoes(observacoes);
-            compra.setUser(currentUser);
+            // ✅✅✅ 5️⃣ CRIAR A COMPRA COM DATA CORRETA (usando novo construtor de Compra.java)
+            Compra compra = new Compra(dataCompra, idPedidoCompra, fornecedor, observacoes, currentUser);
+
+            System.out.println("✅ Compra criada com data: " + compra.getData());
 
             // ✅ 6️⃣ CRIAR ITENS DA COMPRA E VERIFICAR PRODUTOS
             List<ItemCompra> itens = new ArrayList<>();
@@ -151,7 +150,7 @@ public class EntradaEstoqueController {
             }
 
             System.out.println("✅ Compra criada com sucesso: " + compraCompleta.get().getIdPedidoCompra() +
-                    ", Data: " + compraCompleta.get().getData() +
+                    ", Data correta: " + compraCompleta.get().getData() +
                     ", Total produtos: " + compraCompleta.get().getItens().size());
 
             return ResponseEntity.ok(new CompraDTO(compraCompleta.get()));
@@ -167,9 +166,10 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅✅✅ NOVO: Método para extrair data (compatível com VendaController)
-    private LocalDateTime extrairData(Object dataObj) {
+    // ✅✅✅ NOVO: Método para extrair data MELHORADO (resolve timezone)
+    private LocalDateTime extrairDataMelhorado(Object dataObj) {
         if (dataObj == null || dataObj.toString().isEmpty()) {
+            System.out.println("📅 DEBUG - Data nula ou vazia");
             return null;
         }
 
@@ -177,32 +177,66 @@ public class EntradaEstoqueController {
         System.out.println("📅 DEBUG DATA COMPRA - String recebida: '" + dataString + "'");
 
         try {
-            // ✅ FORMATO ESPERADO: "YYYY-MM-DD" (apenas data, sem hora)
-            java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString);
-            return dataApenas.atStartOfDay();
-        } catch (Exception e1) {
-            try {
-                // ✅ Se vier com formato ISO: "YYYY-MM-DDTHH:mm:ss"
-                if (dataString.contains("T")) {
-                    return java.time.LocalDateTime.parse(dataString);
-                } else {
-                    java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-                    return dataApenas.atStartOfDay();
+            // ✅ CASO 1: Formato "YYYY-MM-DDTHH:mm:ss" (ISO completo)
+            if (dataString.contains("T")) {
+                // Remover timezone se existir (ex: "2025-12-30T00:00:00-03:00" → "2025-12-30T00:00:00")
+                if (dataString.contains("+") || dataString.contains("-")) {
+                    int timezoneIndex = Math.max(dataString.lastIndexOf('+'), dataString.lastIndexOf('-'));
+                    if (timezoneIndex > dataString.indexOf('T')) {
+                        dataString = dataString.substring(0, timezoneIndex);
+                    }
                 }
-            } catch (Exception e2) {
-                try {
-                    // ✅ Tentar formato com espaço: "YYYY-MM-DD HH:mm:ss"
-                    String comT = dataString.replace(" ", "T");
-                    return java.time.LocalDateTime.parse(comT);
-                } catch (Exception e3) {
-                    System.out.println("❌ ERRO DATA COMPRA - Formato inválido: " + dataString);
-                    return null;
-                }
+
+                LocalDateTime dataCompleta = LocalDateTime.parse(dataString);
+                System.out.println("📅 DEBUG - Data parseada (ISO completo): " + dataCompleta);
+                return dataCompleta;
             }
+
+            // ✅ CASO 2: Formato "YYYY-MM-DD" (apenas data)
+            java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString);
+            System.out.println("📅 DEBUG - Data parseada (LocalDate): " + dataApenas);
+
+            // Converter para LocalDateTime no início do dia
+            LocalDateTime dataInicioDia = dataApenas.atStartOfDay();
+            System.out.println("📅 DEBUG - Convertido para início do dia: " + dataInicioDia);
+
+            return dataInicioDia;
+
+        } catch (Exception e1) {
+            System.out.println("❌ DEBUG - Erro no parse principal: " + e1.getMessage());
+
+            try {
+                // ✅ CASO 3: Tentar outros formatos
+                // Formato com espaço: "YYYY-MM-DD HH:mm:ss"
+                if (dataString.contains(" ")) {
+                    String comT = dataString.replace(" ", "T");
+                    LocalDateTime dataCompleta = LocalDateTime.parse(comT);
+                    System.out.println("📅 DEBUG - Data parseada (com espaço): " + dataCompleta);
+                    return dataCompleta;
+                }
+
+                // ✅ CASO 4: Formato brasileiro "DD/MM/YYYY"
+                if (dataString.contains("/")) {
+                    String[] partes = dataString.split("/");
+                    if (partes.length == 3) {
+                        String dataISO = partes[2] + "-" + partes[1] + "-" + partes[0];
+                        java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataISO);
+                        LocalDateTime dataInicioDia = dataApenas.atStartOfDay();
+                        System.out.println("📅 DEBUG - Data brasileira convertida: " + dataInicioDia);
+                        return dataInicioDia;
+                    }
+                }
+
+            } catch (Exception e2) {
+                System.out.println("❌ DEBUG - Erro em tentativas alternativas: " + e2.getMessage());
+            }
+
+            System.out.println("❌ ERRO DATA COMPRA - Formato inválido: " + dataString);
+            return null;
         }
     }
 
-    // ✅✅✅ NOVO: PUT - Atualizar compra existente DO USUÁRIO
+    // ✅✅✅ NOVO: PUT - Atualizar compra existente DO USUÁRIO (ATUALIZADO)
     @PutMapping("/compra/{id}")
     public ResponseEntity<?> atualizarCompra(@PathVariable Long id, @RequestBody Map<String, Object> compraData) {
         try {
@@ -226,11 +260,12 @@ public class EntradaEstoqueController {
                 compraExistente.setIdPedidoCompra(novoIdPedidoCompra);
             }
 
-            // ✅ 3️⃣ ATUALIZAR APENAS CAMPOS PERMITIDOS
+            // ✅ 3️⃣ ATUALIZAR APENAS CAMPOS PERMITIDOS (INCLUINDO DATA)
             if (compraData.containsKey("data")) {
-                LocalDateTime novaData = extrairData(compraData.get("data"));
+                LocalDateTime novaData = extrairDataMelhorado(compraData.get("data"));
                 if (novaData != null) {
                     compraExistente.setData(novaData);
+                    System.out.println("📅 DEBUG - Data atualizada para: " + novaData);
                 }
             }
             if (compraData.containsKey("fornecedor")) {
@@ -288,6 +323,7 @@ public class EntradaEstoqueController {
 
     // ✅✅✅ NOVO: GET - Listar todas as compras DO USUÁRIO
     @GetMapping("/compras")
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> listarTodasCompras() {
         try {
             User currentUser = getCurrentUser();
@@ -353,6 +389,97 @@ public class EntradaEstoqueController {
         }
     }
 
+    // ✅✅✅ NOVO: GET - Listar TODAS as compras (sistema novo + sistema antigo) DO USUÁRIO (CORRIGIDO)
+    @GetMapping("/compras-unificadas")
+    public ResponseEntity<?> listarTodasComprasUnificadas() {
+        try {
+            User currentUser = getCurrentUser();
+            System.out.println("🔍 DEBUG COMPRAS UNIFICADAS - Buscando compras para usuário: " + currentUser.getEmail());
+
+            List<CompraDTO> todasCompras = new ArrayList<>();
+
+            // ✅ 1️⃣ BUSCAR COMPRAS DO SISTEMA NOVO (tabela compra)
+            List<Compra> comprasNovas = compraRepository.findByUserOrderByDataDesc(currentUser);
+            System.out.println("📊 DEBUG - Compras sistema novo: " + comprasNovas.size());
+
+            for (Compra compra : comprasNovas) {
+                todasCompras.add(new CompraDTO(compra));
+            }
+
+            // ✅ 2️⃣ BUSCAR COMPRAS DO SISTEMA ANTIGO (entrada_estoque que não são de ItemCompra)
+            // Buscar todas as entradas do usuário
+            List<EntradaEstoque> entradas = entradaEstoqueRepository.findByUserOrderByDataEntradaDesc(currentUser);
+            System.out.println("📊 DEBUG - Total de entradas: " + entradas.size());
+
+            // Filtrar apenas as entradas que NÃO têm item_compra_id
+            List<EntradaEstoque> entradasAntigas = entradas.stream()
+                    .filter(entrada -> entrada.getItemCompra() == null) // ✅ CORREÇÃO: usar getItemCompra() em vez de verificar ID
+                    .collect(Collectors.toList());
+
+            System.out.println("📊 DEBUG - Compras sistema antigo (entradas sem item_compra): " + entradasAntigas.size());
+
+            // ✅ 3️⃣ CONVERTER ENTRADAS ANTIGAS PARA CompraDTO (compra "fake" com 1 item)
+            for (EntradaEstoque entrada : entradasAntigas) {
+                todasCompras.add(converterEntradaParaCompraDTO(entrada));
+            }
+
+            // ✅ 4️⃣ ORDENAR TODAS POR DATA (mais recente primeiro)
+            todasCompras.sort((c1, c2) -> {
+                if (c1.getData() == null && c2.getData() == null) return 0;
+                if (c1.getData() == null) return 1;
+                if (c2.getData() == null) return -1;
+                return c2.getData().compareTo(c1.getData());
+            });
+
+            System.out.println("✅ Compras unificadas: " + todasCompras.size());
+            return ResponseEntity.ok(todasCompras);
+        } catch (Exception e) {
+            System.out.println("❌ ERRO CRÍTICO em listarTodasComprasUnificadas: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao listar compras: " + e.getMessage());
+        }
+    }
+
+    // ✅ MÉTODO AUXILIAR: Converter EntradaEstoque (sistema antigo) para CompraDTO
+    private CompraDTO converterEntradaParaCompraDTO(EntradaEstoque entrada) {
+        CompraDTO dto = new CompraDTO();
+
+        // Definir ID negativo para indicar que é do sistema antigo
+        dto.setId(-entrada.getId()); // ID negativo para diferenciar
+
+        // Usar os campos da entrada
+        dto.setData(entrada.getDataEntrada());
+        dto.setFornecedor(entrada.getFornecedor());
+        dto.setObservacoes(entrada.getObservacoes());
+        dto.setIdPedidoCompra(entrada.getIdPedidoCompra());
+
+        // Calcular total da compra (custo total)
+        dto.setTotalCompra(entrada.getCustoTotal());
+
+        // ✅ IMPORTANTE: Marcar que é do sistema antigo
+        dto.setSistemaAntigo(true);
+
+        // ✅ CRIAR UM ITEM SIMULADO PARA A COMPRA
+        CompraDTO.ItemCompraDTO item = new CompraDTO.ItemCompraDTO();
+        if (entrada.getProduto() != null) {
+            item.setProdutoId(entrada.getProduto().getId());
+            item.setProdutoNome(entrada.getProduto().getNome());
+        } else {
+            item.setProdutoId(0L);
+            item.setProdutoNome("Produto não encontrado");
+        }
+        item.setQuantidade(entrada.getQuantidade());
+        item.setCustoUnitario(entrada.getCustoUnitario());
+        item.setTotal(entrada.getCustoTotal());
+
+        // Adicionar o item à lista
+        List<CompraDTO.ItemCompraDTO> itens = new ArrayList<>();
+        itens.add(item);
+        dto.setItens(itens);
+
+        return dto;
+    }
+
     // ============================================================
     // ✅✅✅ MÉTODOS LEGACY (MANTIDOS PARA COMPATIBILIDADE)
     // ============================================================
@@ -405,7 +532,6 @@ public class EntradaEstoqueController {
             // ✅ NOVO: DEFINIR DATA PERSONALIZADA SE FORNECIDA
             if (dataEntrada != null && !dataEntrada.trim().isEmpty()) {
                 try {
-                    // Converter string para LocalDateTime (formato: "2024-11-20T10:30:00")
                     LocalDateTime dataCustomizada = LocalDateTime.parse(dataEntrada);
                     entrada.setDataEntrada(dataCustomizada);
                 } catch (Exception e) {

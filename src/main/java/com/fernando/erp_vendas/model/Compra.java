@@ -14,7 +14,7 @@ public class Compra {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private LocalDateTime data = LocalDateTime.now();
+    private LocalDateTime data; // ✅ REMOVIDO: valor padrão LocalDateTime.now()
 
     @Column(name = "id_pedido_compra")
     private String idPedidoCompra;
@@ -31,17 +31,23 @@ public class Compra {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    // Construtor padrão
+    // ✅ CONSTRUTOR PADRÃO - NÃO inicializa data automaticamente
     public Compra() {
     }
 
-    // Construtor com parâmetros
-    public Compra(String idPedidoCompra, String fornecedor, String observacoes, User user) {
+    // ✅ NOVO CONSTRUTOR com data como parâmetro
+    public Compra(LocalDateTime data, String idPedidoCompra, String fornecedor,
+                  String observacoes, User user) {
+        this.data = data;
         this.idPedidoCompra = idPedidoCompra;
         this.fornecedor = fornecedor;
         this.observacoes = observacoes;
         this.user = user;
-        this.data = LocalDateTime.now();
+    }
+
+    // ✅ CONSTRUTOR mantido para compatibilidade (usa data atual)
+    public Compra(String idPedidoCompra, String fornecedor, String observacoes, User user) {
+        this(LocalDateTime.now(), idPedidoCompra, fornecedor, observacoes, user);
     }
 
     // Getters e Setters
