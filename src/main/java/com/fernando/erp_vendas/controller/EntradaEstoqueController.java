@@ -15,7 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -51,17 +51,22 @@ public class EntradaEstoqueController {
     // ✅✅✅ NOVA VERSÃO: COMPRAS COM MÚLTIPLOS PRODUTOS
     // ============================================================
 
-    // ✅✅✅ NOVO: POST - Criar nova COMPRA com múltiplos produtos (ATUALIZADO)
+    // ✅✅✅ NOVO: POST - Criar nova COMPRA com múltiplos produtos (COM DEBUG DETALHADO)
     @PostMapping("/compra")
     public ResponseEntity<?> criarCompra(@RequestBody Map<String, Object> compraData) {
         try {
-            System.out.println("🔍 DEBUG COMPRA - Dados recebidos: " + compraData);
+            System.out.println("🔍 DEBUG COMPRA - Dados recebidos do frontend: " + compraData);
+            System.out.println("🔍 DEBUG COMPRA - Chaves presentes: " + compraData.keySet());
 
             User currentUser = getCurrentUser();
 
             // ✅ 1️⃣ VALIDAR DADOS OBRIGATÓRIOS
             if (!compraData.containsKey("idPedidoCompra") || !compraData.containsKey("fornecedor") ||
                     !compraData.containsKey("itens")) {
+                System.out.println("❌ DADOS INCOMPLETOS - Campos faltando:");
+                System.out.println("   - idPedidoCompra: " + compraData.containsKey("idPedidoCompra"));
+                System.out.println("   - fornecedor: " + compraData.containsKey("fornecedor"));
+                System.out.println("   - itens: " + compraData.containsKey("itens"));
                 return ResponseEntity.badRequest().body("Dados incompletos. Campos obrigatórios: idPedidoCompra, fornecedor, itens");
             }
 
@@ -70,13 +75,52 @@ public class EntradaEstoqueController {
             String fornecedor = compraData.get("fornecedor").toString();
             String observacoes = compraData.containsKey("observacoes") ? compraData.get("observacoes").toString() : "";
 
-            // ✅✅✅ EXTRAIR E VALIDAR DATA (MELHORADO)
-            LocalDateTime dataCompra = extrairDataMelhorado(compraData.get("data"));
-            if (dataCompra == null) {
-                dataCompra = LocalDateTime.now(); // Usar data atual se não informada
+            // ✅✅✅ DEBUG CRÍTICO: EXTRAIR E VALIDAR DATA
+            System.out.println("📅 DEBUG CRÍTICO - Verificando campo 'data' no JSON...");
+            Object dataObj = compraData.get("data");
+            System.out.println("📅 DEBUG CRÍTICO - Objeto data recebido: " + dataObj);
+            System.out.println("📅 DEBUG CRÍTICO - Tipo do objeto: " + (dataObj != null ? dataObj.getClass().getName() : "null"));
+
+            if (dataObj != null) {
+                System.out.println("📅 DEBUG CRÍTICO - String data: '" + dataObj.toString() + "'");
+                System.out.println("📅 DEBUG CRÍTICO - Tamanho string: " + dataObj.toString().length());
+                System.out.println("📅 DEBUG CRÍTICO - Contém Z: " + dataObj.toString().contains("Z"));
+                System.out.println("📅 DEBUG CRÍTICO - Contém T: " + dataObj.toString().contains("T"));
+                System.out.println("📅 DEBUG CRÍTICO - Contém +: " + dataObj.toString().contains("+"));
+                System.out.println("📅 DEBUG CRÍTICO - Contém -: " + dataObj.toString().contains("-"));
             }
 
-            System.out.println("📅 DEBUG - Data da compra extraída: " + dataCompra);
+            LocalDateTime dataCompra = extrairDataMelhorado(dataObj);
+            System.out.println("📅 DEBUG CRÍTICO - Data extraída pelo método: " + dataCompra);
+
+            if (dataCompra == null) {
+                System.out.println("⚠️ DEBUG CRÍTICO - Data extraída é NULL, verificando outros campos...");
+
+                // Tentar campo dataCompra (alternativo)
+                if (compraData.containsKey("dataCompra")) {
+                    Object dataCompraObj = compraData.get("dataCompra");
+                    System.out.println("📅 DEBUG CRÍTICO - Tentando campo dataCompra: " + dataCompraObj);
+                    dataCompra = extrairDataMelhorado(dataCompraObj);
+                    System.out.println("📅 DEBUG CRÍTICO - Data extraída de dataCompra: " + dataCompra);
+                }
+
+                // Tentar campo dataEntrada (legacy)
+                if (dataCompra == null && compraData.containsKey("dataEntrada")) {
+                    Object dataEntradaObj = compraData.get("dataEntrada");
+                    System.out.println("📅 DEBUG CRÍTICO - Tentando campo dataEntrada: " + dataEntradaObj);
+                    dataCompra = extrairDataMelhorado(dataEntradaObj);
+                    System.out.println("📅 DEBUG CRÍTICO - Data extraída de dataEntrada: " + dataCompra);
+                }
+
+                // Se ainda nulo, usar hoje
+                if (dataCompra == null) {
+                    System.out.println("⚠️ DEBUG CRÍTICO - Nenhum campo de data válido encontrado, usando data atual");
+                    dataCompra = LocalDateTime.now();
+                }
+            }
+
+            System.out.println("📅 DEBUG FINAL - Data da compra que será usada: " + dataCompra);
+            System.out.println("📅 DEBUG FINAL - Data formatada (yyyy-MM-dd): " + dataCompra.toLocalDate());
 
             // ✅ 3️⃣ VALIDAR E EXTRAIR ITENS DA COMPRA
             List<Map<String, Object>> itensData = (List<Map<String, Object>>) compraData.get("itens");
@@ -91,16 +135,6 @@ public class EntradaEstoqueController {
             for (int i = 0; i < itensData.size(); i++) {
                 Map<String, Object> item = itensData.get(i);
                 System.out.println("🔍 DEBUG ITEM COMPRA " + i + ": " + item);
-
-                if (!item.containsKey("produtoId") || item.get("produtoId") == null) {
-                    return ResponseEntity.badRequest().body("Item " + i + " não contém produtoId");
-                }
-                if (!item.containsKey("quantidade") || item.get("quantidade") == null) {
-                    return ResponseEntity.badRequest().body("Item " + i + " não contém quantidade");
-                }
-                if (!item.containsKey("custoUnitario") || item.get("custoUnitario") == null) {
-                    return ResponseEntity.badRequest().body("Item " + i + " não contém custoUnitario");
-                }
             }
 
             // ✅ 4️⃣ VERIFICAR SE JÁ EXISTE COMPRA COM MESMO ID DO PEDIDO
@@ -108,7 +142,7 @@ public class EntradaEstoqueController {
                 return ResponseEntity.badRequest().body("Já existe uma compra com este ID do pedido: " + idPedidoCompra);
             }
 
-            // ✅✅✅ 5️⃣ CRIAR A COMPRA COM DATA CORRETA (usando novo construtor de Compra.java)
+            // ✅✅✅ 5️⃣ CRIAR A COMPRA COM DATA CORRETA
             Compra compra = new Compra(dataCompra, idPedidoCompra, fornecedor, observacoes, currentUser);
 
             System.out.println("✅ Compra criada com data: " + compra.getData());
@@ -150,14 +184,16 @@ public class EntradaEstoqueController {
             }
 
             System.out.println("✅ Compra criada com sucesso: " + compraCompleta.get().getIdPedidoCompra() +
-                    ", Data correta: " + compraCompleta.get().getData() +
+                    ", Data final: " + compraCompleta.get().getData() +
                     ", Total produtos: " + compraCompleta.get().getItens().size());
 
             return ResponseEntity.ok(new CompraDTO(compraCompleta.get()));
 
         } catch (NumberFormatException e) {
+            System.out.println("❌ NumberFormatException: " + e.getMessage());
             return ResponseEntity.badRequest().body("Erro de formato numérico: " + e.getMessage());
         } catch (ClassCastException e) {
+            System.out.println("❌ ClassCastException: " + e.getMessage());
             return ResponseEntity.badRequest().body("Erro de tipo de dados: " + e.getMessage());
         } catch (Exception e) {
             System.out.println("❌ Erro ao criar compra: " + e.getMessage());
@@ -166,74 +202,91 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅✅✅ NOVO: Método para extrair data MELHORADO (resolve timezone)
+    // ✅✅✅ NOVO: Método para extrair data CORRIGIDO (resolve timezone - AGORA USA UTC)
     private LocalDateTime extrairDataMelhorado(Object dataObj) {
         if (dataObj == null || dataObj.toString().isEmpty()) {
-            System.out.println("📅 DEBUG - Data nula ou vazia");
+            System.out.println("📅 DEBUG EXTRACAO - Data nula ou vazia");
             return null;
         }
 
         String dataString = dataObj.toString().trim();
-        System.out.println("📅 DEBUG DATA COMPRA - String recebida: '" + dataString + "'");
+        System.out.println("📅 DEBUG EXTRACAO - String recebida: '" + dataString + "'");
+        System.out.println("📅 DEBUG EXTRACAO - Tamanho string: " + dataString.length());
 
         try {
-            // ✅ CASO 1: Formato "YYYY-MM-DDTHH:mm:ss" (ISO completo)
+            // ✅ CASO 1: Formato "YYYY-MM-DDTHH:mm:ss" (ISO completo) - COM OFFSET
             if (dataString.contains("T")) {
-                // Remover timezone se existir (ex: "2025-12-30T00:00:00-03:00" → "2025-12-30T00:00:00")
-                if (dataString.contains("+") || dataString.contains("-")) {
-                    int timezoneIndex = Math.max(dataString.lastIndexOf('+'), dataString.lastIndexOf('-'));
-                    if (timezoneIndex > dataString.indexOf('T')) {
-                        dataString = dataString.substring(0, timezoneIndex);
+                System.out.println("📅 DEBUG EXTRACAO - Contém T, processando como ISO...");
+                try {
+                    // ✅ CORREÇÃO: Se tem offset (+ ou -), usar OffsetDateTime e converter para UTC
+                    if (dataString.contains("+") || dataString.contains("-")) {
+                        // Verificar se é realmente um offset (depois do T)
+                        int timezoneIndex = Math.max(dataString.lastIndexOf('+'), dataString.lastIndexOf('-'));
+                        if (timezoneIndex > dataString.indexOf('T')) {
+                            System.out.println("📅 DEBUG EXTRACAO - Tem offset, usando OffsetDateTime...");
+                            // ✅ USAR OffsetDateTime para preservar o offset
+                            OffsetDateTime odt = OffsetDateTime.parse(dataString);
+                            System.out.println("📅 DEBUG EXTRACAO - OffsetDateTime parseado: " + odt);
+
+                            // Converter para UTC (Instant) e depois para LocalDateTime
+                            Instant instant = odt.toInstant();
+                            LocalDateTime dataUTC = LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
+                            System.out.println("📅 DEBUG EXTRACAO - Convertido para UTC: " + dataUTC);
+
+                            return dataUTC;
+                        }
+                    }
+
+                    // Se não tem offset, pode ter Z (UTC)
+                    if (dataString.endsWith("Z")) {
+                        System.out.println("📅 DEBUG EXTRACAO - Termina com Z, tratando como UTC...");
+                        // Remover Z e parsear
+                        String semZ = dataString.substring(0, dataString.length() - 1);
+                        LocalDateTime dataCompleta = LocalDateTime.parse(semZ);
+                        System.out.println("📅 DEBUG EXTRACAO - Data parseada (com Z): " + dataCompleta);
+                        return dataCompleta;
+                    }
+
+                    // Se não tem offset nem Z, parse normalmente
+                    System.out.println("📅 DEBUG EXTRACAO - Sem offset nem Z, parse normal...");
+                    LocalDateTime dataCompleta = LocalDateTime.parse(dataString);
+                    System.out.println("📅 DEBUG EXTRACAO - Data parseada (sem timezone): " + dataCompleta);
+                    return dataCompleta;
+
+                } catch (Exception e) {
+                    System.out.println("❌ DEBUG EXTRACAO - Erro no parse com offset: " + e.getMessage());
+                    // Tentar fallback para parse normal
+                    try {
+                        LocalDateTime dataCompleta = LocalDateTime.parse(dataString);
+                        return dataCompleta;
+                    } catch (Exception e2) {
+                        System.out.println("❌ DEBUG EXTRACAO - Erro em fallback: " + e2.getMessage());
+                        return null;
                     }
                 }
-
-                LocalDateTime dataCompleta = LocalDateTime.parse(dataString);
-                System.out.println("📅 DEBUG - Data parseada (ISO completo): " + dataCompleta);
-                return dataCompleta;
             }
 
             // ✅ CASO 2: Formato "YYYY-MM-DD" (apenas data)
-            java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString);
-            System.out.println("📅 DEBUG - Data parseada (LocalDate): " + dataApenas);
-
-            // Converter para LocalDateTime no início do dia
-            LocalDateTime dataInicioDia = dataApenas.atStartOfDay();
-            System.out.println("📅 DEBUG - Convertido para início do dia: " + dataInicioDia);
-
-            return dataInicioDia;
-
-        } catch (Exception e1) {
-            System.out.println("❌ DEBUG - Erro no parse principal: " + e1.getMessage());
-
+            System.out.println("📅 DEBUG EXTRACAO - Não contém T, tentando como LocalDate...");
             try {
-                // ✅ CASO 3: Tentar outros formatos
-                // Formato com espaço: "YYYY-MM-DD HH:mm:ss"
-                if (dataString.contains(" ")) {
-                    String comT = dataString.replace(" ", "T");
-                    LocalDateTime dataCompleta = LocalDateTime.parse(comT);
-                    System.out.println("📅 DEBUG - Data parseada (com espaço): " + dataCompleta);
-                    return dataCompleta;
-                }
+                java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString);
+                System.out.println("📅 DEBUG EXTRACAO - Data parseada (LocalDate): " + dataApenas);
 
-                // ✅ CASO 4: Formato brasileiro "DD/MM/YYYY"
-                if (dataString.contains("/")) {
-                    String[] partes = dataString.split("/");
-                    if (partes.length == 3) {
-                        String dataISO = partes[2] + "-" + partes[1] + "-" + partes[0];
-                        java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataISO);
-                        LocalDateTime dataInicioDia = dataApenas.atStartOfDay();
-                        System.out.println("📅 DEBUG - Data brasileira convertida: " + dataInicioDia);
-                        return dataInicioDia;
-                    }
-                }
+                // Converter para LocalDateTime no início do dia em UTC
+                LocalDateTime dataInicioDia = dataApenas.atStartOfDay();
+                System.out.println("📅 DEBUG EXTRACAO - Convertido para início do dia: " + dataInicioDia);
 
-            } catch (Exception e2) {
-                System.out.println("❌ DEBUG - Erro em tentativas alternativas: " + e2.getMessage());
+                return dataInicioDia;
+            } catch (Exception e) {
+                System.out.println("❌ DEBUG EXTRACAO - Erro parse LocalDate: " + e.getMessage());
             }
 
-            System.out.println("❌ ERRO DATA COMPRA - Formato inválido: " + dataString);
-            return null;
+        } catch (Exception e1) {
+            System.out.println("❌ DEBUG EXTRACAO - Erro no parse principal: " + e1.getMessage());
         }
+
+        System.out.println("❌ DEBUG EXTRACAO - Nenhum formato reconhecido: " + dataString);
+        return null;
     }
 
     // ✅✅✅ NOVO: PUT - Atualizar compra existente DO USUÁRIO (ATUALIZADO)
@@ -265,7 +318,7 @@ public class EntradaEstoqueController {
                 LocalDateTime novaData = extrairDataMelhorado(compraData.get("data"));
                 if (novaData != null) {
                     compraExistente.setData(novaData);
-                    System.out.println("📅 DEBUG - Data atualizada para: " + novaData);
+                    System.out.println("📅 DEBUG - Data atualizada para (UTC): " + novaData);
                 }
             }
             if (compraData.containsKey("fornecedor")) {
@@ -529,11 +582,14 @@ public class EntradaEstoqueController {
                     currentUser
             );
 
-            // ✅ NOVO: DEFINIR DATA PERSONALIZADA SE FORNECIDA
+            // ✅ NOVO: DEFINIR DATA PERSONALIZADA SE FORNECIDA (AGORA EM UTC)
             if (dataEntrada != null && !dataEntrada.trim().isEmpty()) {
                 try {
-                    LocalDateTime dataCustomizada = LocalDateTime.parse(dataEntrada);
-                    entrada.setDataEntrada(dataCustomizada);
+                    // Usar o mesmo método para extrair data (que agora converte para UTC)
+                    LocalDateTime dataCustomizada = extrairDataMelhorado(dataEntrada);
+                    if (dataCustomizada != null) {
+                        entrada.setDataEntrada(dataCustomizada);
+                    }
                 } catch (Exception e) {
                     // Se falhar, mantém a data atual (comportamento original)
                     System.out.println("⚠️ Data inválida, usando data atual: " + dataEntrada);
@@ -611,11 +667,13 @@ public class EntradaEstoqueController {
                                 "Exclua as VENDAS que utilizaram este lote para liberar a edição.");
             }
 
-            // ✅ NOVO: ATUALIZAR DATA SE FORNECIDA
+            // ✅ NOVO: ATUALIZAR DATA SE FORNECIDA (AGORA EM UTC)
             if (dataEntrada != null && !dataEntrada.trim().isEmpty()) {
                 try {
-                    LocalDateTime dataCustomizada = LocalDateTime.parse(dataEntrada);
-                    entradaExistente.setDataEntrada(dataCustomizada);
+                    LocalDateTime dataCustomizada = extrairDataMelhorado(dataEntrada);
+                    if (dataCustomizada != null) {
+                        entradaExistente.setDataEntrada(dataCustomizada);
+                    }
                 } catch (Exception e) {
                     System.out.println("⚠️ Data inválida na atualização, mantendo data original: " + dataEntrada);
                 }
