@@ -27,17 +27,22 @@ public class ItemVenda {
     @Column(name = "custo_unitario", nullable = false, precision = 10, scale = 2)
     private BigDecimal custoUnitario;
 
+    // ✅✅✅ CORREÇÃO v46.6: ADICIONAR CAMPO precoUnitario (PERMITE NULL PARA COMPATIBILIDADE)
+    @Column(name = "preco_unitario", precision = 10, scale = 2)
+    private BigDecimal precoUnitario;
+
     // 🆕 RELAÇÃO COM USUÁRIO - MULTI-TENANCY
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @JsonIgnore // ✅ ALTERADO: Substituído @JsonIgnoreProperties por @JsonIgnore
     private User user;
 
-    // Construtor padrão
+    // Construtor padrão - MANTIDO EXATAMENTE COMO ESTAVA
     public ItemVenda() {
     }
 
-    // 🆕 CONSTRUTOR ATUALIZADO COM USER
+    // 🆕 CONSTRUTOR ATUALIZADO COM USER - MANTIDO EXATAMENTE COMO ESTAVA
+    // (NÃO MODIFICAR PARA NÃO QUEBRAR CÓDIGO EXISTENTE)
     public ItemVenda(Venda venda, EntradaEstoque lote, Integer quantidade,
                      BigDecimal custoUnitario, User user) {
         this.venda = venda;
@@ -47,7 +52,7 @@ public class ItemVenda {
         this.user = user;
     }
 
-    // Getters e Setters
+    // Getters e Setters EXISTENTES - MANTIDOS INTACTOS
     public Long getId() {
         return id;
     }
@@ -88,7 +93,7 @@ public class ItemVenda {
         this.custoUnitario = custoUnitario;
     }
 
-    // 🆕 GETTER E SETTER PARA USER
+    // 🆕 GETTER E SETTER PARA USER - MANTIDO
     public User getUser() {
         return user;
     }
@@ -97,9 +102,26 @@ public class ItemVenda {
         this.user = user;
     }
 
-    // Método para calcular custo total do item
+    // ✅✅✅ ADICIONAR: GETTER E SETTER PARA precoUnitario (NOVO)
+    public BigDecimal getPrecoUnitario() {
+        return precoUnitario != null ? precoUnitario : BigDecimal.ZERO;
+    }
+
+    public void setPrecoUnitario(BigDecimal precoUnitario) {
+        this.precoUnitario = precoUnitario;
+    }
+
+    // Método para calcular custo total do item - MANTIDO
     public BigDecimal getCustoTotal() {
         return custoUnitario.multiply(BigDecimal.valueOf(quantidade));
+    }
+
+    // ✅✅✅ ADICIONAR: Método para calcular preço total do item (NOVO)
+    public BigDecimal getPrecoTotal() {
+        if (precoUnitario != null && quantidade != null) {
+            return precoUnitario.multiply(BigDecimal.valueOf(quantidade));
+        }
+        return BigDecimal.ZERO;
     }
 
     @Override
@@ -110,6 +132,7 @@ public class ItemVenda {
                 ", lote=" + (lote != null ? lote.getId() : "null") +
                 ", quantidade=" + quantidade +
                 ", custoUnitario=" + custoUnitario +
+                ", precoUnitario=" + precoUnitario + // ✅ ADICIONADO
                 ", userId=" + (user != null ? user.getId() : "null") +
                 '}';
     }

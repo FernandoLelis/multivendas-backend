@@ -46,7 +46,7 @@ public class VendaDTO {
         this.idPedido = venda.getIdPedido();
         this.plataforma = venda.getPlataforma();
 
-        // ✅ NOVO: Converter itens da venda para ItemVendaDTO
+        // ✅✅✅ CORREÇÃO v46.6: Converter itens da venda para ItemVendaDTO com precoUnitario
         if (venda.getItens() != null && !venda.getItens().isEmpty()) {
             this.itens = venda.getItens().stream()
                     .map(item -> new ItemVendaDTO(
@@ -59,6 +59,7 @@ public class VendaDTO {
                                     ? item.getLote().getProduto().getSku() : "",
                             item.getQuantidade(),
                             item.getCustoUnitario(),
+                            item.getPrecoUnitario(), // ✅✅✅ ADICIONADO: precoUnitario do item
                             item.getLote() != null ? item.getLote().getId() : null
                     ))
                     .collect(Collectors.toList());
@@ -85,6 +86,11 @@ public class VendaDTO {
         System.out.println("  Quantidade Total: " + this.getQuantidadeTotal());
         System.out.println("  Custo Produtos: " + this.custoProdutoVendido);
         System.out.println("  Faturamento Calculado: " + this.faturamento);
+
+        // ✅✅✅ DEBUG v46.6: Verificar se precoUnitario está vindo nos itens
+        if (!this.itens.isEmpty()) {
+            System.out.println("💰 [DEBUG-v46.6] Primeiro item - precoUnitario: " + this.itens.get(0).getPrecoUnitario());
+        }
     }
 
     // Construtor para criação (sem id)
@@ -104,6 +110,13 @@ public class VendaDTO {
     public BigDecimal getCustoProdutosTotal() {
         return itens.stream()
                 .map(ItemVendaDTO::getCustoTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    // ✅✅✅ ADICIONADO: Preço total dos produtos (soma de todos os itens)
+    public BigDecimal getPrecoProdutosTotal() {
+        return itens.stream()
+                .map(ItemVendaDTO::getPrecoUnitario)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 

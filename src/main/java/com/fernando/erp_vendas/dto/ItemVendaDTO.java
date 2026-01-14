@@ -12,11 +12,15 @@ public class ItemVendaDTO {
     private Long loteId; // ID do lote específico (EntradaEstoque) - opcional na criação
     private BigDecimal custoTotal; // quantidade × custoUnitario (calculado)
 
-    // Construtor padrão
+    // ✅✅✅ CORREÇÃO v46.6: ADICIONAR CAMPO precoUnitario (PERMITE NULL PARA COMPATIBILIDADE)
+    private BigDecimal precoUnitario; // Preço unitário de VENDA (o que o cliente pagou)
+
+    // Construtor padrão - MANTIDO EXATAMENTE COMO ESTAVA
     public ItemVendaDTO() {
     }
 
-    // Construtor para criação (sem id do ItemVenda, com lote opcional)
+    // Construtor para criação (sem id do ItemVenda, com lote opcional) - MANTIDO
+    // (NÃO MODIFICAR PARA NÃO QUEBRAR CÓDIGO EXISTENTE)
     public ItemVendaDTO(Long produtoId, String produtoNome, String produtoSku,
                         Integer quantidade, BigDecimal custoUnitario, Long loteId) {
         this.produtoId = produtoId;
@@ -30,7 +34,8 @@ public class ItemVendaDTO {
                 : BigDecimal.ZERO;
     }
 
-    // Construtor completo (com id do ItemVenda)
+    // Construtor completo (com id do ItemVenda) - MANTIDO
+    // (NÃO MODIFICAR PARA NÃO QUEBRAR CÓDIGO EXISTENTE)
     public ItemVendaDTO(Long id, Long produtoId, String produtoNome, String produtoSku,
                         Integer quantidade, BigDecimal custoUnitario, Long loteId) {
         this.id = id;
@@ -45,7 +50,24 @@ public class ItemVendaDTO {
                 : BigDecimal.ZERO;
     }
 
-    // Getters e Setters
+    // ✅✅✅ ADICIONAR: Construtor COMPATÍVEL com precoUnitario (NOVO - para uso futuro)
+    public ItemVendaDTO(Long id, Long produtoId, String produtoNome, String produtoSku,
+                        Integer quantidade, BigDecimal custoUnitario,
+                        BigDecimal precoUnitario, Long loteId) {
+        this.id = id;
+        this.produtoId = produtoId;
+        this.produtoNome = produtoNome;
+        this.produtoSku = produtoSku;
+        this.quantidade = quantidade;
+        this.custoUnitario = custoUnitario;
+        this.precoUnitario = precoUnitario; // ✅ NOVO PARÂMETRO
+        this.loteId = loteId;
+        this.custoTotal = custoUnitario != null && quantidade != null
+                ? custoUnitario.multiply(BigDecimal.valueOf(quantidade))
+                : BigDecimal.ZERO;
+    }
+
+    // Getters e Setters EXISTENTES - MANTIDOS INTACTOS
     public Long getId() {
         return id;
     }
@@ -122,7 +144,16 @@ public class ItemVendaDTO {
         this.custoTotal = custoTotal;
     }
 
-    // Método auxiliar para calcular/atualizar custoTotal
+    // ✅✅✅ ADICIONAR: GETTER E SETTER PARA precoUnitario (NOVO)
+    public BigDecimal getPrecoUnitario() {
+        return precoUnitario != null ? precoUnitario : BigDecimal.ZERO;
+    }
+
+    public void setPrecoUnitario(BigDecimal precoUnitario) {
+        this.precoUnitario = precoUnitario;
+    }
+
+    // Método auxiliar para calcular/atualizar custoTotal - MANTIDO
     public void calcularCustoTotal() {
         if (custoUnitario != null && quantidade != null) {
             this.custoTotal = custoUnitario.multiply(BigDecimal.valueOf(quantidade));
@@ -138,6 +169,7 @@ public class ItemVendaDTO {
                 ", produtoSku='" + produtoSku + '\'' +
                 ", quantidade=" + quantidade +
                 ", custoUnitario=" + custoUnitario +
+                ", precoUnitario=" + precoUnitario + // ✅ ADICIONADO
                 ", loteId=" + loteId +
                 ", custoTotal=" + custoTotal +
                 '}';

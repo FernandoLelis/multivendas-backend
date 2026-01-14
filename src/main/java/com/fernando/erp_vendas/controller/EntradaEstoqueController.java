@@ -15,6 +15,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
 import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -48,25 +49,20 @@ public class EntradaEstoqueController {
     }
 
     // ============================================================
-    // ✅✅✅ NOVA VERSÃO: COMPRAS COM MÚLTIPLOS PRODUTOS
+    // ✅✅✅ NOVA VERSÃO: COMPRAS COM MÚLTIPLOS PRODUTOS (v46.6)
     // ============================================================
 
-    // ✅✅✅ NOVO: POST - Criar nova COMPRA com múltiplos produtos (COM DEBUG DETALHADO)
+    // ✅✅✅ ATUALIZADO: POST - Criar nova COMPRA com múltiplos produtos (v46.6)
     @PostMapping("/compra")
     public ResponseEntity<?> criarCompra(@RequestBody Map<String, Object> compraData) {
         try {
-            System.out.println("🔍 DEBUG COMPRA - Dados recebidos do frontend: " + compraData);
-            System.out.println("🔍 DEBUG COMPRA - Chaves presentes: " + compraData.keySet());
+            System.out.println("🔍 [DEBUG-v46.6] COMPRA - Dados recebidos do frontend: " + compraData);
 
             User currentUser = getCurrentUser();
 
             // ✅ 1️⃣ VALIDAR DADOS OBRIGATÓRIOS
             if (!compraData.containsKey("idPedidoCompra") || !compraData.containsKey("fornecedor") ||
                     !compraData.containsKey("itens")) {
-                System.out.println("❌ DADOS INCOMPLETOS - Campos faltando:");
-                System.out.println("   - idPedidoCompra: " + compraData.containsKey("idPedidoCompra"));
-                System.out.println("   - fornecedor: " + compraData.containsKey("fornecedor"));
-                System.out.println("   - itens: " + compraData.containsKey("itens"));
                 return ResponseEntity.badRequest().body("Dados incompletos. Campos obrigatórios: idPedidoCompra, fornecedor, itens");
             }
 
@@ -75,77 +71,35 @@ public class EntradaEstoqueController {
             String fornecedor = compraData.get("fornecedor").toString();
             String observacoes = compraData.containsKey("observacoes") ? compraData.get("observacoes").toString() : "";
 
-            // ✅✅✅ DEBUG CRÍTICO: EXTRAIR E VALIDAR DATA
-            System.out.println("📅 DEBUG CRÍTICO - Verificando campo 'data' no JSON...");
+            // ✅✅✅ EXTRAIR E VALIDAR DATA
             Object dataObj = compraData.get("data");
-            System.out.println("📅 DEBUG CRÍTICO - Objeto data recebido: " + dataObj);
-            System.out.println("📅 DEBUG CRÍTICO - Tipo do objeto: " + (dataObj != null ? dataObj.getClass().getName() : "null"));
-
-            if (dataObj != null) {
-                System.out.println("📅 DEBUG CRÍTICO - String data: '" + dataObj.toString() + "'");
-                System.out.println("📅 DEBUG CRÍTICO - Tamanho string: " + dataObj.toString().length());
-                System.out.println("📅 DEBUG CRÍTICO - Contém Z: " + dataObj.toString().contains("Z"));
-                System.out.println("📅 DEBUG CRÍTICO - Contém T: " + dataObj.toString().contains("T"));
-                System.out.println("📅 DEBUG CRÍTICO - Contém +: " + dataObj.toString().contains("+"));
-                System.out.println("📅 DEBUG CRÍTICO - Contém -: " + dataObj.toString().contains("-"));
-            }
-
             LocalDateTime dataCompra = extrairDataMelhorado(dataObj);
-            System.out.println("📅 DEBUG CRÍTICO - Data extraída pelo método: " + dataCompra);
 
             if (dataCompra == null) {
-                System.out.println("⚠️ DEBUG CRÍTICO - Data extraída é NULL, verificando outros campos...");
-
-                // Tentar campo dataCompra (alternativo)
-                if (compraData.containsKey("dataCompra")) {
-                    Object dataCompraObj = compraData.get("dataCompra");
-                    System.out.println("📅 DEBUG CRÍTICO - Tentando campo dataCompra: " + dataCompraObj);
-                    dataCompra = extrairDataMelhorado(dataCompraObj);
-                    System.out.println("📅 DEBUG CRÍTICO - Data extraída de dataCompra: " + dataCompra);
-                }
-
-                // Tentar campo dataEntrada (legacy)
-                if (dataCompra == null && compraData.containsKey("dataEntrada")) {
-                    Object dataEntradaObj = compraData.get("dataEntrada");
-                    System.out.println("📅 DEBUG CRÍTICO - Tentando campo dataEntrada: " + dataEntradaObj);
-                    dataCompra = extrairDataMelhorado(dataEntradaObj);
-                    System.out.println("📅 DEBUG CRÍTICO - Data extraída de dataEntrada: " + dataCompra);
-                }
-
-                // Se ainda nulo, usar hoje
-                if (dataCompra == null) {
-                    System.out.println("⚠️ DEBUG CRÍTICO - Nenhum campo de data válido encontrado, usando data atual");
-                    dataCompra = LocalDateTime.now();
-                }
+                System.out.println("⚠️ [DEBUG-v46.6] Data nula, usando data atual");
+                dataCompra = LocalDateTime.now();
             }
-
-            System.out.println("📅 DEBUG FINAL - Data da compra que será usada: " + dataCompra);
-            System.out.println("📅 DEBUG FINAL - Data formatada (yyyy-MM-dd): " + dataCompra.toLocalDate());
 
             // ✅ 3️⃣ VALIDAR E EXTRAIR ITENS DA COMPRA
             List<Map<String, Object>> itensData = (List<Map<String, Object>>) compraData.get("itens");
-
-            System.out.println("🔍 DEBUG ITENS COMPRA - Tamanho: " + (itensData != null ? itensData.size() : "null"));
 
             if (itensData == null || itensData.isEmpty()) {
                 return ResponseEntity.badRequest().body("A compra deve conter pelo menos um produto");
             }
 
-            // ✅ DEBUG DETALHADO DE CADA ITEM
-            for (int i = 0; i < itensData.size(); i++) {
-                Map<String, Object> item = itensData.get(i);
-                System.out.println("🔍 DEBUG ITEM COMPRA " + i + ": " + item);
-            }
-
             // ✅ 4️⃣ VERIFICAR SE JÁ EXISTE COMPRA COM MESMO ID DO PEDIDO
-            if (compraRepository.findByIdPedidoCompraAndUser(idPedidoCompra, currentUser).isPresent()) {
+            Optional<Compra> compraExistente = compraRepository.findByIdPedidoCompraAndUser(idPedidoCompra, currentUser);
+            if (compraExistente.isPresent()) {
                 return ResponseEntity.badRequest().body("Já existe uma compra com este ID do pedido: " + idPedidoCompra);
             }
 
             // ✅✅✅ 5️⃣ CRIAR A COMPRA COM DATA CORRETA
-            Compra compra = new Compra(dataCompra, idPedidoCompra, fornecedor, observacoes, currentUser);
-
-            System.out.println("✅ Compra criada com data: " + compra.getData());
+            Compra compra = new Compra();
+            compra.setData(dataCompra);
+            compra.setIdPedidoCompra(idPedidoCompra);
+            compra.setFornecedor(fornecedor);
+            compra.setObservacoes(observacoes);
+            compra.setUser(currentUser);
 
             // ✅ 6️⃣ CRIAR ITENS DA COMPRA E VERIFICAR PRODUTOS
             List<ItemCompra> itens = new ArrayList<>();
@@ -163,10 +117,32 @@ public class EntradaEstoqueController {
                 Produto produto = produtoOpt.get();
 
                 // ✅ CRIAR ITEM DA COMPRA
-                ItemCompra item = new ItemCompra(compra, produto, quantidade, custoUnitario, currentUser);
+                ItemCompra item = new ItemCompra();
+                item.setCompra(compra);
+                item.setProduto(produto);
+                item.setQuantidade(quantidade);
+                item.setCustoUnitario(custoUnitario);
+                item.setUser(currentUser);
 
-                // ✅ CRIAR O LOTE (EntradaEstoque) automaticamente
-                item.criarLote();
+                // ✅ CRIAR O LOTE (EntradaEstoque)
+                EntradaEstoque lote = new EntradaEstoque();
+                lote.setProduto(produto);
+                lote.setQuantidade(quantidade);
+                lote.setCustoUnitario(custoUnitario);
+                lote.setCustoTotal(custoUnitario.multiply(BigDecimal.valueOf(quantidade)));
+                lote.setDataEntrada(dataCompra);
+                lote.setFornecedor(fornecedor);
+                lote.setIdPedidoCompra(idPedidoCompra);
+                lote.setCategoria("COMPRA");
+                lote.setObservacoes(observacoes);
+                lote.setUser(currentUser);
+                lote.setSaldo(quantidade);
+
+                // Salvar o lote
+                entradaEstoqueRepository.save(lote);
+
+                // Associar lote ao item
+                item.setLote(lote);
 
                 itens.add(item);
             }
@@ -174,232 +150,235 @@ public class EntradaEstoqueController {
             // ✅ 7️⃣ ADICIONAR ITENS À COMPRA
             compra.setItens(itens);
 
-            // ✅ 8️⃣ SALVAR COMPRA (cascade salvará os itens e lotes)
+            // ✅ 8️⃣ SALVAR COMPRA
             Compra compraSalva = compraRepository.save(compra);
 
-            // ✅ 9️⃣ BUSCAR COMPRA COMPLETA (COM ITENS E LOTES PERSISTIDOS)
+            // ✅ 9️⃣ BUSCAR COMPRA COMPLETA
             Optional<Compra> compraCompleta = compraRepository.findByIdPedidoCompraAndUser(idPedidoCompra, currentUser);
             if (!compraCompleta.isPresent()) {
                 throw new RuntimeException("Erro ao recuperar compra criada: " + idPedidoCompra);
             }
 
-            System.out.println("✅ Compra criada com sucesso: " + compraCompleta.get().getIdPedidoCompra() +
-                    ", Data final: " + compraCompleta.get().getData() +
-                    ", Total produtos: " + compraCompleta.get().getItens().size());
+            System.out.println("✅ [DEBUG-v46.6] Compra criada: " + compraCompleta.get().getIdPedidoCompra() +
+                    ", Itens: " + compraCompleta.get().getItens().size());
 
             return ResponseEntity.ok(new CompraDTO(compraCompleta.get()));
 
-        } catch (NumberFormatException e) {
-            System.out.println("❌ NumberFormatException: " + e.getMessage());
-            return ResponseEntity.badRequest().body("Erro de formato numérico: " + e.getMessage());
-        } catch (ClassCastException e) {
-            System.out.println("❌ ClassCastException: " + e.getMessage());
-            return ResponseEntity.badRequest().body("Erro de tipo de dados: " + e.getMessage());
         } catch (Exception e) {
-            System.out.println("❌ Erro ao criar compra: " + e.getMessage());
+            System.out.println("❌ [DEBUG-v46.6] Erro ao criar compra: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao criar compra: " + e.getMessage());
         }
     }
 
-    // ✅✅✅ NOVO: Método para extrair data CORRIGIDO (resolve timezone - AGORA USA UTC)
-    private LocalDateTime extrairDataMelhorado(Object dataObj) {
-        if (dataObj == null || dataObj.toString().isEmpty()) {
-            System.out.println("📅 DEBUG EXTRACAO - Data nula ou vazia");
-            return null;
-        }
-
-        String dataString = dataObj.toString().trim();
-        System.out.println("📅 DEBUG EXTRACAO - String recebida: '" + dataString + "'");
-        System.out.println("📅 DEBUG EXTRACAO - Tamanho string: " + dataString.length());
-
-        try {
-            // ✅ CASO 1: Formato "YYYY-MM-DDTHH:mm:ss" (ISO completo) - COM OFFSET
-            if (dataString.contains("T")) {
-                System.out.println("📅 DEBUG EXTRACAO - Contém T, processando como ISO...");
-                try {
-                    // ✅ CORREÇÃO: Se tem offset (+ ou -), usar OffsetDateTime e converter para UTC
-                    if (dataString.contains("+") || dataString.contains("-")) {
-                        // Verificar se é realmente um offset (depois do T)
-                        int timezoneIndex = Math.max(dataString.lastIndexOf('+'), dataString.lastIndexOf('-'));
-                        if (timezoneIndex > dataString.indexOf('T')) {
-                            System.out.println("📅 DEBUG EXTRACAO - Tem offset, usando OffsetDateTime...");
-                            // ✅ USAR OffsetDateTime para preservar o offset
-                            OffsetDateTime odt = OffsetDateTime.parse(dataString);
-                            System.out.println("📅 DEBUG EXTRACAO - OffsetDateTime parseado: " + odt);
-
-                            // Converter para UTC (Instant) e depois para LocalDateTime
-                            Instant instant = odt.toInstant();
-                            LocalDateTime dataUTC = LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
-                            System.out.println("📅 DEBUG EXTRACAO - Convertido para UTC: " + dataUTC);
-
-                            return dataUTC;
-                        }
-                    }
-
-                    // Se não tem offset, pode ter Z (UTC)
-                    if (dataString.endsWith("Z")) {
-                        System.out.println("📅 DEBUG EXTRACAO - Termina com Z, tratando como UTC...");
-                        // Remover Z e parsear
-                        String semZ = dataString.substring(0, dataString.length() - 1);
-                        LocalDateTime dataCompleta = LocalDateTime.parse(semZ);
-                        System.out.println("📅 DEBUG EXTRACAO - Data parseada (com Z): " + dataCompleta);
-                        return dataCompleta;
-                    }
-
-                    // Se não tem offset nem Z, parse normalmente
-                    System.out.println("📅 DEBUG EXTRACAO - Sem offset nem Z, parse normal...");
-                    LocalDateTime dataCompleta = LocalDateTime.parse(dataString);
-                    System.out.println("📅 DEBUG EXTRACAO - Data parseada (sem timezone): " + dataCompleta);
-                    return dataCompleta;
-
-                } catch (Exception e) {
-                    System.out.println("❌ DEBUG EXTRACAO - Erro no parse com offset: " + e.getMessage());
-                    // Tentar fallback para parse normal
-                    try {
-                        LocalDateTime dataCompleta = LocalDateTime.parse(dataString);
-                        return dataCompleta;
-                    } catch (Exception e2) {
-                        System.out.println("❌ DEBUG EXTRACAO - Erro em fallback: " + e2.getMessage());
-                        return null;
-                    }
-                }
-            }
-
-            // ✅ CASO 2: Formato "YYYY-MM-DD" (apenas data)
-            System.out.println("📅 DEBUG EXTRACAO - Não contém T, tentando como LocalDate...");
-            try {
-                java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString);
-                System.out.println("📅 DEBUG EXTRACAO - Data parseada (LocalDate): " + dataApenas);
-
-                // Converter para LocalDateTime no início do dia em UTC
-                LocalDateTime dataInicioDia = dataApenas.atStartOfDay();
-                System.out.println("📅 DEBUG EXTRACAO - Convertido para início do dia: " + dataInicioDia);
-
-                return dataInicioDia;
-            } catch (Exception e) {
-                System.out.println("❌ DEBUG EXTRACAO - Erro parse LocalDate: " + e.getMessage());
-            }
-
-        } catch (Exception e1) {
-            System.out.println("❌ DEBUG EXTRACAO - Erro no parse principal: " + e1.getMessage());
-        }
-
-        System.out.println("❌ DEBUG EXTRACAO - Nenhum formato reconhecido: " + dataString);
-        return null;
-    }
-
-    // ✅✅✅ NOVO: PUT - Atualizar compra existente DO USUÁRIO (ATUALIZADO)
+    // ✅✅✅✅✅ CORREÇÃO v46.6: PUT - Atualizar compra existente COM PROCESSAMENTO DE ITENS
     @PutMapping("/compra/{id}")
     public ResponseEntity<?> atualizarCompra(@PathVariable Long id, @RequestBody Map<String, Object> compraData) {
         try {
+            System.out.println("🔄 [DEBUG-v46.6] ATUALIZAR-COMPRA - Iniciando atualização da compra ID: " + id);
+            System.out.println("🔄 [DEBUG-v46.6] Dados recebidos: " + compraData.keySet());
+
             User currentUser = getCurrentUser();
 
             // ✅ 1️⃣ BUSCAR COMPRA EXISTENTE
             Optional<Compra> compraExistenteOpt = compraRepository.findByIdAndUser(id, currentUser);
             if (!compraExistenteOpt.isPresent()) {
+                System.out.println("❌ [DEBUG-v46.6] Compra não encontrada: " + id);
                 return ResponseEntity.notFound().build();
             }
 
             Compra compraExistente = compraExistenteOpt.get();
+            System.out.println("✅ [DEBUG-v46.6] Compra encontrada: " + compraExistente.getIdPedidoCompra());
 
             // ✅ 2️⃣ VERIFICAR SE JÁ EXISTE OUTRA COMPRA COM MESMO ID DO PEDIDO
             if (compraData.containsKey("idPedidoCompra")) {
                 String novoIdPedidoCompra = compraData.get("idPedidoCompra").toString();
                 Optional<Compra> compraComMesmoPedido = compraRepository.findByIdPedidoCompraAndUser(novoIdPedidoCompra, currentUser);
                 if (compraComMesmoPedido.isPresent() && !compraComMesmoPedido.get().getId().equals(id)) {
+                    System.out.println("❌ [DEBUG-v46.6] ID do pedido já existe: " + novoIdPedidoCompra);
                     return ResponseEntity.badRequest().body("Já existe outra compra com este ID do pedido");
                 }
                 compraExistente.setIdPedidoCompra(novoIdPedidoCompra);
+                System.out.println("📝 [DEBUG-v46.6] ID do pedido atualizado: " + novoIdPedidoCompra);
             }
 
-            // ✅ 3️⃣ ATUALIZAR APENAS CAMPOS PERMITIDOS (INCLUINDO DATA)
+            // ✅ 3️⃣ ATUALIZAR CAMPOS BÁSICOS (INCLUINDO DATA)
             if (compraData.containsKey("data")) {
                 LocalDateTime novaData = extrairDataMelhorado(compraData.get("data"));
                 if (novaData != null) {
                     compraExistente.setData(novaData);
-                    System.out.println("📅 DEBUG - Data atualizada para (UTC): " + novaData);
+                    System.out.println("📝 [DEBUG-v46.6] Data atualizada: " + novaData);
                 }
             }
+
             if (compraData.containsKey("fornecedor")) {
                 compraExistente.setFornecedor(compraData.get("fornecedor").toString());
-            }
-            if (compraData.containsKey("observacoes")) {
-                compraExistente.setObservacoes(compraData.get("observacoes").toString());
+                System.out.println("📝 [DEBUG-v46.6] Fornecedor atualizado: " + compraData.get("fornecedor"));
             }
 
-            // ✅ 4️⃣ SALVAR COMPRA ATUALIZADA
+            if (compraData.containsKey("observacoes")) {
+                compraExistente.setObservacoes(compraData.get("observacoes").toString());
+                System.out.println("📝 [DEBUG-v46.6] Observações atualizadas");
+            }
+
+            // ✅✅✅ 4️⃣ PROCESSAR ITENS MODIFICADOS (CORREÇÃO CRÍTICA v46.6)
+            if (compraData.containsKey("itens")) {
+                List<Map<String, Object>> itensData = (List<Map<String, Object>>) compraData.get("itens");
+
+                System.out.println("🔄 [DEBUG-v46.6] PROCESSANDO ITENS - Total recebido: " +
+                        (itensData != null ? itensData.size() : 0) + " itens");
+
+                if (itensData == null || itensData.isEmpty()) {
+                    System.out.println("❌ [DEBUG-v46.6] ERRO: Lista de itens vazia");
+                    return ResponseEntity.badRequest().body("A compra deve conter pelo menos um produto");
+                }
+
+                // ✅ REMOVER ITENS ANTIGOS E SEUS LOTES
+                System.out.println("🔄 [DEBUG-v46.6] Removendo itens e lotes antigos...");
+
+                // Remover lotes associados aos itens antigos
+                for (ItemCompra itemAntigo : compraExistente.getItens()) {
+                    if (itemAntigo.getLote() != null) {
+                        entradaEstoqueRepository.delete(itemAntigo.getLote());
+                    }
+                }
+
+                // Limpar lista de itens
+                compraExistente.getItens().clear();
+                System.out.println("✅ [DEBUG-v46.6] Itens antigos removidos");
+
+                // ✅ CRIAR NOVOS ITENS
+                System.out.println("🔄 [DEBUG-v46.6] Criando novos itens...");
+                for (Map<String, Object> itemData : itensData) {
+                    // Extrair dados do item
+                    Long produtoId = Long.valueOf(itemData.get("produtoId").toString());
+                    Integer quantidade = Integer.valueOf(itemData.get("quantidade").toString());
+                    BigDecimal custoUnitario = new BigDecimal(itemData.get("custoUnitario").toString());
+
+                    // Buscar produto
+                    Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
+                    if (!produtoOpt.isPresent()) {
+                        System.out.println("❌ [DEBUG-v46.6] Produto não encontrado: ID " + produtoId);
+                        return ResponseEntity.badRequest()
+                                .body("Produto não encontrado: ID " + produtoId);
+                    }
+
+                    Produto produto = produtoOpt.get();
+                    System.out.println("✅ [DEBUG-v46.6] Produto encontrado: " + produto.getNome());
+
+                    // ✅ CRIAR NOVO ITEM DA COMPRA
+                    ItemCompra novoItem = new ItemCompra();
+                    novoItem.setCompra(compraExistente);
+                    novoItem.setProduto(produto);
+                    novoItem.setQuantidade(quantidade);
+                    novoItem.setCustoUnitario(custoUnitario);
+                    novoItem.setUser(currentUser);
+
+                    // ✅ CRIAR NOVO LOTE
+                    EntradaEstoque novoLote = new EntradaEstoque();
+                    novoLote.setProduto(produto);
+                    novoLote.setQuantidade(quantidade);
+                    novoLote.setCustoUnitario(custoUnitario);
+                    novoLote.setCustoTotal(custoUnitario.multiply(BigDecimal.valueOf(quantidade)));
+                    novoLote.setDataEntrada(compraExistente.getData());
+                    novoLote.setFornecedor(compraExistente.getFornecedor());
+                    novoLote.setIdPedidoCompra(compraExistente.getIdPedidoCompra());
+                    novoLote.setCategoria("COMPRA");
+                    novoLote.setObservacoes(compraExistente.getObservacoes());
+                    novoLote.setUser(currentUser);
+                    novoLote.setSaldo(quantidade);
+
+                    // Salvar o lote
+                    EntradaEstoque loteSalvo = entradaEstoqueRepository.save(novoLote);
+                    System.out.println("✅ [DEBUG-v46.6] Lote criado: ID " + loteSalvo.getId());
+
+                    // Associar lote ao item
+                    novoItem.setLote(loteSalvo);
+
+                    // Adicionar item à compra
+                    compraExistente.getItens().add(novoItem);
+                    System.out.println("✅ [DEBUG-v46.6] Item criado para produto: " + produto.getNome());
+                }
+            } else {
+                System.out.println("❌ [DEBUG-v46.6] ERRO: Campo 'itens' não encontrado");
+                return ResponseEntity.badRequest().body("Dados de itens não fornecidos");
+            }
+
+            // ✅ 5️⃣ SALVAR COMPRA ATUALIZADA
+            System.out.println("🔄 [DEBUG-v46.6] Salvando compra atualizada...");
             Compra compraSalva = compraRepository.save(compraExistente);
+
+            System.out.println("✅✅✅ [DEBUG-v46.6] COMPRA ATUALIZADA COM SUCESSO: " + compraSalva.getIdPedidoCompra());
 
             return ResponseEntity.ok(new CompraDTO(compraSalva));
 
         } catch (Exception e) {
-            System.out.println("❌ Erro ao atualizar compra: " + e.getMessage());
+            System.out.println("❌ [DEBUG-v46.6] Erro ao atualizar compra: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao atualizar compra: " + e.getMessage());
         }
     }
 
-    // ✅✅✅ NOVO: DELETE - Excluir compra com validação DO USUÁRIO
-    @DeleteMapping("/compra/{id}")
-    public ResponseEntity<?> excluirCompra(@PathVariable Long id) {
+    // ============================================================
+    // ✅✅✅ MÉTODOS AUXILIARES (MANTIDOS)
+    // ============================================================
+
+    // ✅✅✅ NOVO: Método para extrair data CORRIGIDO (v46.6)
+    private LocalDateTime extrairDataMelhorado(Object dataObj) {
+        if (dataObj == null || dataObj.toString().isEmpty()) {
+            return null;
+        }
+
+        String dataString = dataObj.toString().trim();
+
         try {
-            User currentUser = getCurrentUser();
-
-            Optional<Compra> compraOpt = compraRepository.findByIdAndUser(id, currentUser);
-            if (!compraOpt.isPresent()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            Compra compra = compraOpt.get();
-
-            // ✅ VERIFICAR SE ALGUM LOTE FOI CONSUMIDO (não pode excluir se já vendeu)
-            for (ItemCompra item : compra.getItens()) {
-                if (item.getLote() != null && item.getLote().getSaldo() < item.getLote().getQuantidade()) {
-                    return ResponseEntity.badRequest()
-                            .body("Não é possível excluir compra: lote " + item.getLote().getId() +
-                                    " já foi parcialmente consumido. Saldo atual: " +
-                                    item.getLote().getSaldo() + "/" + item.getLote().getQuantidade());
+            // ✅ CASO 1: Formato "YYYY-MM-DDTHH:mm:ss" com offset
+            if (dataString.contains("T")) {
+                if (dataString.contains("+") || dataString.contains("-")) {
+                    int timezoneIndex = Math.max(dataString.lastIndexOf('+'), dataString.lastIndexOf('-'));
+                    if (timezoneIndex > dataString.indexOf('T')) {
+                        OffsetDateTime odt = OffsetDateTime.parse(dataString);
+                        Instant instant = odt.toInstant();
+                        return LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
+                    }
                 }
+
+                if (dataString.endsWith("Z")) {
+                    String semZ = dataString.substring(0, dataString.length() - 1);
+                    return LocalDateTime.parse(semZ);
+                }
+
+                return LocalDateTime.parse(dataString);
             }
 
-            // ✅ EXCLUIR COMPRA (cascade excluirá itens e lotes)
-            compraRepository.delete(compra);
-
-            System.out.println("✅ Compra excluída: " + compra.getIdPedidoCompra());
-            return ResponseEntity.noContent().build();
+            // ✅ CASO 2: Formato "YYYY-MM-DD" (apenas data)
+            java.time.LocalDate dataApenas = java.time.LocalDate.parse(dataString);
+            return dataApenas.atStartOfDay();
 
         } catch (Exception e) {
-            System.out.println("❌ Erro ao excluir compra: " + e.getMessage());
-            return ResponseEntity.badRequest().body("Erro ao excluir compra: " + e.getMessage());
+            System.out.println("❌ [DEBUG-v46.6] Erro ao extrair data: " + e.getMessage());
+            return null;
         }
     }
 
-    // ✅✅✅ NOVO: GET - Listar todas as compras DO USUÁRIO
+    // ============================================================
+    // ✅✅✅ MÉTODOS LEGACY (MANTIDOS PARA COMPATIBILIDADE)
+    // ============================================================
+
     @GetMapping("/compras")
-    @SuppressWarnings("unchecked")
     public ResponseEntity<?> listarTodasCompras() {
         try {
             User currentUser = getCurrentUser();
-            System.out.println("🔍 DEBUG COMPRAS - Buscando compras para usuário: " + currentUser.getEmail());
-
             List<Compra> compras = compraRepository.findByUserOrderByDataDesc(currentUser);
-            System.out.println("📊 DEBUG COMPRAS - Total de compras encontradas: " + compras.size());
-
-            // ✅ CONVERTER PARA DTO
             List<CompraDTO> comprasDTO = compras.stream()
                     .map(CompraDTO::new)
                     .collect(Collectors.toList());
-
-            System.out.println("✅ Compras convertidas para DTO: " + comprasDTO.size());
             return ResponseEntity.ok(comprasDTO);
         } catch (Exception e) {
-            System.out.println("❌ ERRO CRÍTICO em listarTodasCompras: " + e.getMessage());
-            e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao listar compras: " + e.getMessage());
         }
     }
 
-    // ✅✅✅ NOVO: GET - Buscar compra por ID DO USUÁRIO
     @GetMapping("/compra/{id}")
     public ResponseEntity<?> buscarCompraPorId(@PathVariable Long id) {
         try {
@@ -412,71 +391,66 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅✅✅ NOVO: GET - Buscar compra por ID do Pedido DO USUÁRIO
-    @GetMapping("/compra/pedido/{idPedidoCompra}")
-    public ResponseEntity<?> buscarCompraPorIdPedido(@PathVariable String idPedidoCompra) {
+    @DeleteMapping("/compra/{id}")
+    public ResponseEntity<?> excluirCompra(@PathVariable Long id) {
         try {
             User currentUser = getCurrentUser();
-            Optional<Compra> compra = compraRepository.findByIdPedidoCompraAndUser(idPedidoCompra, currentUser);
-            return compra.map(c -> ResponseEntity.ok(new CompraDTO(c)))
-                    .orElseGet(() -> ResponseEntity.notFound().build());
+            Optional<Compra> compraOpt = compraRepository.findByIdAndUser(id, currentUser);
+            if (!compraOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Compra compra = compraOpt.get();
+
+            // ✅ VERIFICAR SE ALGUM LOTE FOI CONSUMIDO
+            for (ItemCompra item : compra.getItens()) {
+                if (item.getLote() != null && item.getLote().getSaldo() < item.getLote().getQuantidade()) {
+                    return ResponseEntity.badRequest()
+                            .body("Não é possível excluir compra: lote já foi parcialmente consumido");
+                }
+            }
+
+            compraRepository.delete(compra);
+            return ResponseEntity.noContent().build();
+
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao buscar compra por ID do pedido: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Erro ao excluir compra: " + e.getMessage());
         }
     }
 
-    // ✅✅✅ NOVO: GET - Buscar compras por fornecedor DO USUÁRIO
-    @GetMapping("/compras/fornecedor/{fornecedor}")
-    public ResponseEntity<?> buscarComprasPorFornecedor(@PathVariable String fornecedor) {
-        try {
-            User currentUser = getCurrentUser();
-            List<Compra> compras = compraRepository.findByFornecedorContainingAndUser(fornecedor, currentUser);
-
-            List<CompraDTO> comprasDTO = compras.stream()
-                    .map(CompraDTO::new)
-                    .collect(Collectors.toList());
-
-            return ResponseEntity.ok(comprasDTO);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao buscar compras por fornecedor: " + e.getMessage());
-        }
-    }
-
-    // ✅✅✅ NOVO: GET - Listar TODAS as compras (sistema novo + sistema antigo) DO USUÁRIO (CORRIGIDO)
     @GetMapping("/compras-unificadas")
     public ResponseEntity<?> listarTodasComprasUnificadas() {
         try {
             User currentUser = getCurrentUser();
-            System.out.println("🔍 DEBUG COMPRAS UNIFICADAS - Buscando compras para usuário: " + currentUser.getEmail());
+            System.out.println("🔍 [DEBUG-v46.6] Buscando compras unificadas para usuário: " + currentUser.getEmail());
 
             List<CompraDTO> todasCompras = new ArrayList<>();
 
-            // ✅ 1️⃣ BUSCAR COMPRAS DO SISTEMA NOVO (tabela compra)
+            // ✅ 1️⃣ BUSCAR COMPRAS DO SISTEMA NOVO
             List<Compra> comprasNovas = compraRepository.findByUserOrderByDataDesc(currentUser);
-            System.out.println("📊 DEBUG - Compras sistema novo: " + comprasNovas.size());
+            System.out.println("📊 [DEBUG-v46.6] Compras sistema novo: " + comprasNovas.size());
 
             for (Compra compra : comprasNovas) {
                 todasCompras.add(new CompraDTO(compra));
             }
 
-            // ✅ 2️⃣ BUSCAR COMPRAS DO SISTEMA ANTIGO (entrada_estoque que não são de ItemCompra)
-            // Buscar todas as entradas do usuário
+            // ✅ 2️⃣ BUSCAR COMPRAS DO SISTEMA ANTIGO
             List<EntradaEstoque> entradas = entradaEstoqueRepository.findByUserOrderByDataEntradaDesc(currentUser);
-            System.out.println("📊 DEBUG - Total de entradas: " + entradas.size());
+            System.out.println("📊 [DEBUG-v46.6] Total de entradas: " + entradas.size());
 
             // Filtrar apenas as entradas que NÃO têm item_compra_id
             List<EntradaEstoque> entradasAntigas = entradas.stream()
-                    .filter(entrada -> entrada.getItemCompra() == null) // ✅ CORREÇÃO: usar getItemCompra() em vez de verificar ID
+                    .filter(entrada -> entrada.getItemCompra() == null)
                     .collect(Collectors.toList());
 
-            System.out.println("📊 DEBUG - Compras sistema antigo (entradas sem item_compra): " + entradasAntigas.size());
+            System.out.println("📊 [DEBUG-v46.6] Compras sistema antigo: " + entradasAntigas.size());
 
-            // ✅ 3️⃣ CONVERTER ENTRADAS ANTIGAS PARA CompraDTO (compra "fake" com 1 item)
+            // ✅ 3️⃣ CONVERTER ENTRADAS ANTIGAS PARA CompraDTO
             for (EntradaEstoque entrada : entradasAntigas) {
                 todasCompras.add(converterEntradaParaCompraDTO(entrada));
             }
 
-            // ✅ 4️⃣ ORDENAR TODAS POR DATA (mais recente primeiro)
+            // ✅ 4️⃣ ORDENAR TODAS POR DATA
             todasCompras.sort((c1, c2) -> {
                 if (c1.getData() == null && c2.getData() == null) return 0;
                 if (c1.getData() == null) return 1;
@@ -484,21 +458,21 @@ public class EntradaEstoqueController {
                 return c2.getData().compareTo(c1.getData());
             });
 
-            System.out.println("✅ Compras unificadas: " + todasCompras.size());
+            System.out.println("✅ [DEBUG-v46.6] Compras unificadas: " + todasCompras.size());
             return ResponseEntity.ok(todasCompras);
         } catch (Exception e) {
-            System.out.println("❌ ERRO CRÍTICO em listarTodasComprasUnificadas: " + e.getMessage());
+            System.out.println("❌ [DEBUG-v46.6] Erro em listarTodasComprasUnificadas: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao listar compras: " + e.getMessage());
         }
     }
 
-    // ✅ MÉTODO AUXILIAR: Converter EntradaEstoque (sistema antigo) para CompraDTO
+    // ✅ MÉTODO AUXILIAR: Converter EntradaEstoque para CompraDTO
     private CompraDTO converterEntradaParaCompraDTO(EntradaEstoque entrada) {
         CompraDTO dto = new CompraDTO();
 
         // Definir ID negativo para indicar que é do sistema antigo
-        dto.setId(-entrada.getId()); // ID negativo para diferenciar
+        dto.setId(-entrada.getId());
 
         // Usar os campos da entrada
         dto.setData(entrada.getDataEntrada());
@@ -506,13 +480,13 @@ public class EntradaEstoqueController {
         dto.setObservacoes(entrada.getObservacoes());
         dto.setIdPedidoCompra(entrada.getIdPedidoCompra());
 
-        // Calcular total da compra (custo total)
+        // Calcular total da compra
         dto.setTotalCompra(entrada.getCustoTotal());
 
         // ✅ IMPORTANTE: Marcar que é do sistema antigo
         dto.setSistemaAntigo(true);
 
-        // ✅ CRIAR UM ITEM SIMULADO PARA A COMPRA
+        // ✅ CRIAR UM ITEM SIMULADO
         CompraDTO.ItemCompraDTO item = new CompraDTO.ItemCompraDTO();
         if (entrada.getProduto() != null) {
             item.setProdutoId(entrada.getProduto().getId());
@@ -534,10 +508,9 @@ public class EntradaEstoqueController {
     }
 
     // ============================================================
-    // ✅✅✅ MÉTODOS LEGACY (MANTIDOS PARA COMPATIBILIDADE)
+    // ✅✅✅ MÉTODOS LEGACY PARA COMPATIBILIDADE
     // ============================================================
 
-    // ✅ CORRIGIDO: Registrar nova entrada de estoque (COMPRA) PARA O USUÁRIO COM DATA
     @PostMapping("/entrada")
     public ResponseEntity<?> registrarEntrada(
             @RequestParam Long produtoId,
@@ -564,13 +537,13 @@ public class EntradaEstoqueController {
                 return ResponseEntity.badRequest().body("Categoria é obrigatório");
             }
 
-            // 🆕 VERIFICAR SE JÁ EXISTE COMPRA COM MESMO ID PEDIDO PARA ESTE USUÁRIO
+            // 🆕 VERIFICAR SE JÁ EXISTE COMPRA COM MESMO ID PEDIDO
             if (entradaEstoqueRepository.findByIdPedidoCompraAndUser(idPedidoCompra, currentUser).isPresent()) {
                 return ResponseEntity.badRequest()
                         .body("Já existe uma compra cadastrada com este ID do Pedido: " + idPedidoCompra);
             }
 
-            // ✅ CORREÇÃO: Cria entrada com cálculo automático de custo unitário e saldo
+            // ✅ Cria entrada com cálculo automático de custo unitário e saldo
             EntradaEstoque entrada = new EntradaEstoque(
                     produto,
                     quantidade,
@@ -582,17 +555,15 @@ public class EntradaEstoqueController {
                     currentUser
             );
 
-            // ✅ NOVO: DEFINIR DATA PERSONALIZADA SE FORNECIDA (AGORA EM UTC)
+            // ✅ DEFINIR DATA PERSONALIZADA SE FORNECIDA
             if (dataEntrada != null && !dataEntrada.trim().isEmpty()) {
                 try {
-                    // Usar o mesmo método para extrair data (que agora converte para UTC)
                     LocalDateTime dataCustomizada = extrairDataMelhorado(dataEntrada);
                     if (dataCustomizada != null) {
                         entrada.setDataEntrada(dataCustomizada);
                     }
                 } catch (Exception e) {
-                    // Se falhar, mantém a data atual (comportamento original)
-                    System.out.println("⚠️ Data inválida, usando data atual: " + dataEntrada);
+                    System.out.println("⚠️ [DEBUG-v46.6] Data inválida, usando data atual: " + dataEntrada);
                 }
             }
 
@@ -607,7 +578,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅ ATUALIZADO: Atualizar entrada de estoque (COMPRA) DO USUÁRIO COM DATA
     @PutMapping("/entrada/{id}")
     public ResponseEntity<?> atualizarEntrada(
             @PathVariable Long id,
@@ -667,7 +637,7 @@ public class EntradaEstoqueController {
                                 "Exclua as VENDAS que utilizaram este lote para liberar a edição.");
             }
 
-            // ✅ NOVO: ATUALIZAR DATA SE FORNECIDA (AGORA EM UTC)
+            // ✅ ATUALIZAR DATA SE FORNECIDA
             if (dataEntrada != null && !dataEntrada.trim().isEmpty()) {
                 try {
                     LocalDateTime dataCustomizada = extrairDataMelhorado(dataEntrada);
@@ -675,7 +645,7 @@ public class EntradaEstoqueController {
                         entradaExistente.setDataEntrada(dataCustomizada);
                     }
                 } catch (Exception e) {
-                    System.out.println("⚠️ Data inválida na atualização, mantendo data original: " + dataEntrada);
+                    System.out.println("⚠️ [DEBUG-v46.6] Data inválida na atualização, mantendo data original: " + dataEntrada);
                 }
             }
 
@@ -688,7 +658,7 @@ public class EntradaEstoqueController {
             entradaExistente.setCategoria(categoria);
             entradaExistente.setObservacoes(observacoes != null ? observacoes : "");
 
-            // ✅ CORREÇÃO: Recalcula o custo unitário COM TRATAMENTO DE ERRO
+            // ✅ CORREÇÃO: Recalcula o custo unitário
             if (quantidade != null && quantidade > 0) {
                 try {
                     entradaExistente.setCustoUnitario(custoTotal.divide(
@@ -714,7 +684,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅ ATUALIZADO: Listar todas as entradas de estoque (COMPRAS) DO USUÁRIO
     @GetMapping("/entradas")
     public ResponseEntity<?> listarTodasEntradas() {
         try {
@@ -726,7 +695,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅ ATUALIZADO: Listar entradas de estoque de um produto (HISTÓRICO DE COMPRAS) DO USUÁRIO
     @GetMapping("/produto/{produtoId}")
     public ResponseEntity<?> listarEntradasPorProduto(@PathVariable Long produtoId) {
         try {
@@ -743,7 +711,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅ ATUALIZADO: Verificar saldo total de um produto DO USUÁRIO
     @GetMapping("/saldo/{produtoId}")
     public ResponseEntity<?> verificarSaldo(@PathVariable Long produtoId) {
         try {
@@ -759,7 +726,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅ ATUALIZADO: Calcular custo de uma venda (LÓGICA PEPS) DO USUÁRIO
     @GetMapping("/calcular-custo/{produtoId}")
     public ResponseEntity<?> calcularCustoVenda(
             @PathVariable Long produtoId,
@@ -778,7 +744,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅ ATUALIZADO: Excluir entrada de estoque (COMPRA) DO USUÁRIO COM VALIDAÇÃO PEPS
     @DeleteMapping("/entrada/{id}")
     public ResponseEntity<?> excluirEntrada(@PathVariable Long id) {
         try {
@@ -787,7 +752,7 @@ public class EntradaEstoqueController {
             EntradaEstoque entrada = entradaEstoqueRepository.findByIdAndUser(id, currentUser)
                     .orElseThrow(() -> new RuntimeException("Compra não encontrada ou não pertence ao usuário"));
 
-            // ✅ NOVO: VALIDAÇÃO PEPS - Não permite excluir lote parcialmente consumido
+            // ✅ VALIDAÇÃO PEPS - Não permite excluir lote parcialmente consumido
             Integer saldoAtual = entrada.getSaldo();
             Integer quantidadeOriginal = entrada.getQuantidade();
 
@@ -807,7 +772,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // 🆕 GET - Buscar entrada por ID DO USUÁRIO
     @GetMapping("/entrada/{id}")
     public ResponseEntity<?> buscarEntradaPorId(@PathVariable Long id) {
         try {
@@ -820,7 +784,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // 🆕 GET - Buscar entradas por categoria DO USUÁRIO
     @GetMapping("/categoria/{categoria}")
     public ResponseEntity<?> buscarPorCategoria(@PathVariable String categoria) {
         try {
@@ -832,7 +795,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // 🆕 GET - Buscar entradas por fornecedor DO USUÁRIO
     @GetMapping("/fornecedor/{fornecedor}")
     public ResponseEntity<?> buscarPorFornecedor(@PathVariable String fornecedor) {
         try {
@@ -844,7 +806,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // 🆕 GET - Entradas com saldo baixo DO USUÁRIO
     @GetMapping("/saldo-baixo")
     public ResponseEntity<?> getEntradasComSaldoBaixo() {
         try {
@@ -856,7 +817,6 @@ public class EntradaEstoqueController {
         }
     }
 
-    // 🆕 POST - Limpar dados inconsistentes (mantido para compatibilidade)
     @PostMapping("/limpar-dados-inconsistentes")
     public ResponseEntity<?> limparDadosInconsistentes() {
         try {
