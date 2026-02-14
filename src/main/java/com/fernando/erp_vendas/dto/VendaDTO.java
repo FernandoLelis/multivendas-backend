@@ -1,229 +1,265 @@
 package com.fernando.erp_vendas.dto;
 
+import com.fernando.erp_vendas.model.ItemVenda;
 import com.fernando.erp_vendas.model.Venda;
-import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import java.time.LocalDateTime;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 public class VendaDTO {
     private Long id;
-
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime data;
-
     private String idPedido;
     private String plataforma;
-
-    // ✅ NOVO: Lista de produtos da venda
-    private List<ItemVendaDTO> itens = new ArrayList<>();
-
-    // Preços e custos da venda (agregados de todos os itens)
-    private Double precoVenda; // ⚠️ Preço TOTAL da venda (soma de todos os produtos)
+    private Double precoVenda;
     private Double fretePagoPeloCliente;
     private Double custoEnvio;
     private Double tarifaPlataforma;
-    private Double custoProdutoVendido; // ✅ Soma dos custos de todos os itens (calculado pelo PEPS)
     private Double despesasOperacionais;
+    private Double custoProdutoVendido;
 
-    // Campos de cálculo para o frontend
+    // ✅ CAMPOS CALCULADOS
     private Double faturamento;
     private Double custoEfetivoTotal;
     private Double lucroBruto;
     private Double lucroLiquido;
     private Double roi;
 
-    // Construtor a partir da entidade Venda
+    private List<ItemVendaDTO> itens;
+
+    // ✅ CONSTRUTOR PADRÃO
+    public VendaDTO() {
+        this.itens = new ArrayList<>();
+    }
+
+    // ✅ CONSTRUTOR A PARTIR DA ENTIDADE VENDA
     public VendaDTO(Venda venda) {
         this.id = venda.getId();
-
-        // ✅ CORREÇÃO: Garantir que data nunca seja null
-        this.data = venda.getData() != null ? venda.getData() : LocalDateTime.now();
-
+        this.data = venda.getData();
         this.idPedido = venda.getIdPedido();
         this.plataforma = venda.getPlataforma();
+        this.precoVenda = venda.getPrecoVenda();
+        this.fretePagoPeloCliente = venda.getFretePagoPeloCliente();
+        this.custoEnvio = venda.getCustoEnvio();
+        this.tarifaPlataforma = venda.getTarifaPlataforma();
+        this.despesasOperacionais = venda.getDespesasOperacionais();
+        this.custoProdutoVendido = venda.getCustoProdutoVendido();
 
-        // ✅✅✅ CORREÇÃO v46.6: Converter itens da venda para ItemVendaDTO com precoUnitario
-        if (venda.getItens() != null && !venda.getItens().isEmpty()) {
+        // ✅✅✅ CORREÇÃO CRÍTICA v46.8.2: FILTRAR APENAS ITENS COM PRODUTO
+        if (venda.getItens() != null) {
             this.itens = venda.getItens().stream()
-                    .map(item -> new ItemVendaDTO(
-                            item.getId(),
-                            item.getLote() != null && item.getLote().getProduto() != null
-                                    ? item.getLote().getProduto().getId() : null,
-                            item.getLote() != null && item.getLote().getProduto() != null
-                                    ? item.getLote().getProduto().getNome() : "Produto não encontrado",
-                            item.getLote() != null && item.getLote().getProduto() != null
-                                    ? item.getLote().getProduto().getSku() : "",
-                            item.getQuantidade(),
-                            item.getCustoUnitario(),
-                            item.getPrecoUnitario(), // ✅✅✅ ADICIONADO: precoUnitario do item
-                            item.getLote() != null ? item.getLote().getId() : null
-                    ))
+                    .filter(item -> item.getProduto() != null) // ✅ FILTRAR ITENS COM PRODUTO
+                    .map(item -> {
+                        ItemVendaDTO dto = new ItemVendaDTO();
+                        dto.setId(item.getId());
+
+                        // ✅✅✅ GARANTIR QUE PRODUTO EXISTE
+                        if (item.getProduto() != null) {
+                            dto.setProdutoId(item.getProduto().getId());
+                            dto.setProdutoNome(item.getProduto().getNome());
+                            dto.setProdutoSku(item.getProduto().getSku());
+                        } else {
+                            // Fallback seguro
+                            dto.setProdutoId(0L);
+                            dto.setProdutoNome("Produto não encontrado");
+                            dto.setProdutoSku("N/A");
+                        }
+
+                        dto.setQuantidade(item.getQuantidade());
+                        dto.setCustoUnitario(item.getCustoUnitario());
+                        dto.setPrecoUnitario(item.getPrecoUnitario());
+
+                        if (item.getLote() != null) {
+                            dto.setLoteId(item.getLote().getId());
+                        }
+
+                        dto.setCustoTotal(item.getCustoTotal());
+                        return dto;
+                    })
                     .collect(Collectors.toList());
+        } else {
+            this.itens = new ArrayList<>();
         }
 
-        // ✅ TRATAMENTO CRÍTICO: Garantir que nenhum campo Double seja null
-        this.precoVenda = venda.getPrecoVenda() != null ? venda.getPrecoVenda() : 0.0;
-        this.fretePagoPeloCliente = venda.getFretePagoPeloCliente() != null ? venda.getFretePagoPeloCliente() : 0.0;
-        this.custoEnvio = venda.getCustoEnvio() != null ? venda.getCustoEnvio() : 0.0;
-        this.tarifaPlataforma = venda.getTarifaPlataforma() != null ? venda.getTarifaPlataforma() : 0.0;
-        this.custoProdutoVendido = venda.getCustoProdutoVendido() != null ? venda.getCustoProdutoVendido() : 0.0;
-        this.despesasOperacionais = venda.getDespesasOperacionais() != null ? venda.getDespesasOperacionais() : 0.0;
-
-        // ✅ CORREÇÃO: Usar métodos da entidade para cálculos consistentes
+        // ✅ CÁLCULOS
         this.faturamento = venda.calcularFaturamento();
         this.custoEfetivoTotal = venda.calcularCustoEfetivoTotal();
         this.lucroBruto = venda.calcularLucroBruto();
         this.lucroLiquido = venda.calcularLucroLiquido();
         this.roi = venda.calcularROI();
-
-        // DEBUG: Verificar cálculo
-        System.out.println("✅ VendaDTO - Venda com " + this.itens.size() + " produtos:");
-        System.out.println("  Preço Venda (TOTAL): " + this.precoVenda);
-        System.out.println("  Quantidade Total: " + this.getQuantidadeTotal());
-        System.out.println("  Custo Produtos: " + this.custoProdutoVendido);
-        System.out.println("  Faturamento Calculado: " + this.faturamento);
-
-        // ✅✅✅ DEBUG v46.6: Verificar se precoUnitario está vindo nos itens
-        if (!this.itens.isEmpty()) {
-            System.out.println("💰 [DEBUG-v46.6] Primeiro item - precoUnitario: " + this.itens.get(0).getPrecoUnitario());
-        }
     }
 
-    // Construtor para criação (sem id)
-    public VendaDTO() {
+    // ========== GETTERS E SETTERS ==========
+
+    public Long getId() {
+        return id;
     }
 
-    // ✅ NOVO: Métodos auxiliares para quantidade e produtos
+    public void setId(Long id) {
+        this.id = id;
+    }
 
-    // Quantidade total (soma de todos os itens)
-    public Integer getQuantidadeTotal() {
-        return itens.stream()
+    public LocalDateTime getData() {
+        return data;
+    }
+
+    public void setData(LocalDateTime data) {
+        this.data = data;
+    }
+
+    public String getIdPedido() {
+        return idPedido;
+    }
+
+    public void setIdPedido(String idPedido) {
+        this.idPedido = idPedido;
+    }
+
+    public String getPlataforma() {
+        return plataforma;
+    }
+
+    public void setPlataforma(String plataforma) {
+        this.plataforma = plataforma;
+    }
+
+    public Double getPrecoVenda() {
+        return precoVenda != null ? precoVenda : 0.0;
+    }
+
+    public void setPrecoVenda(Double precoVenda) {
+        this.precoVenda = precoVenda;
+    }
+
+    public Double getFretePagoPeloCliente() {
+        return fretePagoPeloCliente != null ? fretePagoPeloCliente : 0.0;
+    }
+
+    public void setFretePagoPeloCliente(Double fretePagoPeloCliente) {
+        this.fretePagoPeloCliente = fretePagoPeloCliente;
+    }
+
+    public Double getCustoEnvio() {
+        return custoEnvio != null ? custoEnvio : 0.0;
+    }
+
+    public void setCustoEnvio(Double custoEnvio) {
+        this.custoEnvio = custoEnvio;
+    }
+
+    public Double getTarifaPlataforma() {
+        return tarifaPlataforma != null ? tarifaPlataforma : 0.0;
+    }
+
+    public void setTarifaPlataforma(Double tarifaPlataforma) {
+        this.tarifaPlataforma = tarifaPlataforma;
+    }
+
+    public Double getDespesasOperacionais() {
+        return despesasOperacionais != null ? despesasOperacionais : 0.0;
+    }
+
+    public void setDespesasOperacionais(Double despesasOperacionais) {
+        this.despesasOperacionais = despesasOperacionais;
+    }
+
+    public Double getCustoProdutoVendido() {
+        return custoProdutoVendido != null ? custoProdutoVendido : 0.0;
+    }
+
+    public void setCustoProdutoVendido(Double custoProdutoVendido) {
+        this.custoProdutoVendido = custoProdutoVendido;
+    }
+
+    public List<ItemVendaDTO> getItens() {
+        return itens != null ? itens : new ArrayList<>();
+    }
+
+    public void setItens(List<ItemVendaDTO> itens) {
+        this.itens = itens;
+    }
+
+    public Double getFaturamento() {
+        return faturamento != null ? faturamento : 0.0;
+    }
+
+    public void setFaturamento(Double faturamento) {
+        this.faturamento = faturamento;
+    }
+
+    public Double getCustoEfetivoTotal() {
+        return custoEfetivoTotal != null ? custoEfetivoTotal : 0.0;
+    }
+
+    public void setCustoEfetivoTotal(Double custoEfetivoTotal) {
+        this.custoEfetivoTotal = custoEfetivoTotal;
+    }
+
+    public Double getLucroBruto() {
+        return lucroBruto != null ? lucroBruto : 0.0;
+    }
+
+    public void setLucroBruto(Double lucroBruto) {
+        this.lucroBruto = lucroBruto;
+    }
+
+    public Double getLucroLiquido() {
+        return lucroLiquido != null ? lucroLiquido : 0.0;
+    }
+
+    public void setLucroLiquido(Double lucroLiquido) {
+        this.lucroLiquido = lucroLiquido;
+    }
+
+    public Double getRoi() {
+        return roi != null ? roi : 0.0;
+    }
+
+    public void setRoi(Double roi) {
+        this.roi = roi;
+    }
+
+    // ✅ MÉTODO PARA VERIFICAR SE TEM ITENS VÁLIDOS
+    public boolean temItensValidos() {
+        return getItens() != null && !getItens().isEmpty();
+    }
+
+    // ✅ MÉTODO PARA OBTER QUANTIDADE TOTAL DE PRODUTOS
+    public Integer getQuantidadeTotalProdutos() {
+        if (getItens() == null) return 0;
+        return getItens().stream()
                 .mapToInt(ItemVendaDTO::getQuantidade)
                 .sum();
     }
 
-    // Custo total dos produtos (soma de todos os itens)
-    public BigDecimal getCustoProdutosTotal() {
-        return itens.stream()
+    // ✅ MÉTODO PARA OBTER CUSTO TOTAL DOS PRODUTOS
+    public BigDecimal getCustoTotalProdutos() {
+        if (getItens() == null) return BigDecimal.ZERO;
+        return getItens().stream()
                 .map(ItemVendaDTO::getCustoTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    // ✅✅✅ ADICIONADO: Preço total dos produtos (soma de todos os itens)
-    public BigDecimal getPrecoProdutosTotal() {
-        return itens.stream()
-                .map(ItemVendaDTO::getPrecoUnitario)
+    // ✅ MÉTODO PARA OBTER FATURAMENTO TOTAL
+    public BigDecimal getFaturamentoTotal() {
+        if (getItens() == null) return BigDecimal.ZERO;
+        return getItens().stream()
+                .map(item -> item.getPrecoUnitario().multiply(BigDecimal.valueOf(item.getQuantidade())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    // Lista de IDs de produtos únicos
-    public List<Long> getProdutosIds() {
-        return itens.stream()
-                .map(ItemVendaDTO::getProdutoId)
-                .distinct()
-                .collect(Collectors.toList());
-    }
-
-    // GETTERS
-    public Long getId() { return id; }
-    public LocalDateTime getData() { return data; }
-    public String getIdPedido() { return idPedido; }
-    public String getPlataforma() { return plataforma; }
-
-    // ✅ NOVO: Getter para itens
-    public List<ItemVendaDTO> getItens() { return itens; }
-
-    // Getters para campos financeiros (com tratamento null)
-    public Double getPrecoVenda() { return precoVenda != null ? precoVenda : 0.0; }
-    public Double getFretePagoPeloCliente() { return fretePagoPeloCliente != null ? fretePagoPeloCliente : 0.0; }
-    public Double getCustoEnvio() { return custoEnvio != null ? custoEnvio : 0.0; }
-    public Double getTarifaPlataforma() { return tarifaPlataforma != null ? tarifaPlataforma : 0.0; }
-    public Double getCustoProdutoVendido() { return custoProdutoVendido != null ? custoProdutoVendido : 0.0; }
-    public Double getDespesasOperacionais() { return despesasOperacionais != null ? despesasOperacionais : 0.0; }
-
-    // Getters para campos de cálculo
-    public Double getFaturamento() { return faturamento != null ? faturamento : 0.0; }
-    public Double getCustoEfetivoTotal() { return custoEfetivoTotal != null ? custoEfetivoTotal : 0.0; }
-    public Double getLucroBruto() { return lucroBruto != null ? lucroBruto : 0.0; }
-    public Double getLucroLiquido() { return lucroLiquido != null ? lucroLiquido : 0.0; }
-    public Double getRoi() { return roi != null ? roi : 0.0; }
-
-    // SETTERS
-    public void setId(Long id) { this.id = id; }
-    public void setData(LocalDateTime data) { this.data = data; }
-    public void setIdPedido(String idPedido) { this.idPedido = idPedido; }
-    public void setPlataforma(String plataforma) { this.plataforma = plataforma; }
-
-    // ✅ NOVO: Setter para itens
-    public void setItens(List<ItemVendaDTO> itens) { this.itens = itens; }
-
-    public void setPrecoVenda(Double precoVenda) { this.precoVenda = precoVenda; }
-    public void setFretePagoPeloCliente(Double fretePagoPeloCliente) { this.fretePagoPeloCliente = fretePagoPeloCliente; }
-    public void setCustoEnvio(Double custoEnvio) { this.custoEnvio = custoEnvio; }
-    public void setTarifaPlataforma(Double tarifaPlataforma) { this.tarifaPlataforma = tarifaPlataforma; }
-    public void setCustoProdutoVendido(Double custoProdutoVendido) { this.custoProdutoVendido = custoProdutoVendido; }
-    public void setDespesasOperacionais(Double despesasOperacionais) { this.despesasOperacionais = despesasOperacionais; }
-
-    // Setters para campos de cálculo (opcional, normalmente calculados)
-    public void setFaturamento(Double faturamento) { this.faturamento = faturamento; }
-    public void setCustoEfetivoTotal(Double custoEfetivoTotal) { this.custoEfetivoTotal = custoEfetivoTotal; }
-    public void setLucroBruto(Double lucroBruto) { this.lucroBruto = lucroBruto; }
-    public void setLucroLiquido(Double lucroLiquido) { this.lucroLiquido = lucroLiquido; }
-    public void setRoi(Double roi) { this.roi = roi; }
-
-    // ✅ MÉTODOS DEPRECIADOS (COM @JsonIgnore PARA EVITAR SERIALIZAÇÃO)
-
-    @Deprecated
-    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
-    public Integer getQuantidade() {
-        return getQuantidadeTotal();
-    }
-
-    @Deprecated
-    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
-    public void setQuantidade(Integer quantidade) {
-        // Não faz nada - quantidade agora é derivada dos itens
-        System.out.println("⚠️ AVISO: setQuantidade() depreciado. Use setItens() em vez disso.");
-    }
-
-    @Deprecated
-    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
-    public Long getProdutoId() {
-        // Retorna o primeiro produto se houver itens
-        return !itens.isEmpty() ? itens.get(0).getProdutoId() : null;
-    }
-
-    @Deprecated
-    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
-    public void setProdutoId(Long produtoId) {
-        System.out.println("⚠️ AVISO: setProdutoId() depreciado. Use setItens() em vez disso.");
-    }
-
-    @Deprecated
-    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
-    public String getProdutoNome() {
-        return !itens.isEmpty() ? itens.get(0).getProdutoNome() : "";
-    }
-
-    @Deprecated
-    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
-    public void setProdutoNome(String produtoNome) {
-        System.out.println("⚠️ AVISO: setProdutoNome() depreciado. Use setItens() em vez disso.");
-    }
-
-    @Deprecated
-    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
-    public String getProdutoSku() {
-        return !itens.isEmpty() ? itens.get(0).getProdutoSku() : "";
-    }
-
-    @Deprecated
-    @JsonIgnore  // ✅ IMPEDE QUE APAREÇA NO JSON
-    public void setProdutoSku(String produtoSku) {
-        System.out.println("⚠️ AVISO: setProdutoSku() depreciado. Use setItens() em vez disso.");
+    @Override
+    public String toString() {
+        return "VendaDTO{" +
+                "id=" + id +
+                ", idPedido='" + idPedido + '\'' +
+                ", plataforma='" + plataforma + '\'' +
+                ", precoVenda=" + precoVenda +
+                ", itens=" + (itens != null ? itens.size() : 0) +
+                ", faturamento=" + faturamento +
+                ", lucroLiquido=" + lucroLiquido +
+                '}';
     }
 }

@@ -4,71 +4,89 @@ import com.fernando.erp_vendas.model.ItemVenda;
 import com.fernando.erp_vendas.model.User;
 import com.fernando.erp_vendas.model.Venda;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface ItemVendaRepository extends JpaRepository<ItemVenda, Long> {
 
-    // 🆕 MÉTODOS MULTI-TENANCY - TODOS FILTRADOS POR USER
-
-    // Encontrar todos os itens de uma venda específica DO USUÁRIO
+    // ✅ MÉTODO EXISTENTE: Buscar itens por venda e usuário (todos os itens)
     List<ItemVenda> findByVendaAndUser(Venda venda, User user);
 
-    // Encontrar itens por lote E USUÁRIO (útil para auditoria)
-    List<ItemVenda> findByLoteIdAndUser(Long loteId, User user);
+    // ✅ NOVO MÉTODO v46.8.2: Buscar apenas itens com produto não nulo
+    @Query("SELECT i FROM ItemVenda i WHERE i.venda = :venda AND i.user = :user AND i.produto IS NOT NULL")
+    List<ItemVenda> findByVendaAndUserAndProdutoNotNull(@Param("venda") Venda venda, @Param("user") User user);
 
-    // 🆕 Buscar item por ID e usuário
-    Optional<ItemVenda> findByIdAndUser(Long id, User user);
-
-    // 🆕 Buscar todos os itens do usuário
+    // ✅ MÉTODO EXISTENTE: Buscar itens por usuário
     List<ItemVenda> findByUser(User user);
 
-    // 🆕 Buscar itens por produto (através do lote) DO USUÁRIO
-    @Query("SELECT iv FROM ItemVenda iv WHERE iv.lote.produto.id = :produtoId AND iv.user = :user")
+    // ✅ MÉTODO: Contar itens por venda
+    @Query("SELECT COUNT(i) FROM ItemVenda i WHERE i.venda = :venda")
+    Long countByVenda(@Param("venda") Venda venda);
+
+    // ✅ NOVO MÉTODO: Buscar itens por produto
+    @Query("SELECT i FROM ItemVenda i WHERE i.produto.id = :produtoId AND i.user = :user")
     List<ItemVenda> findByProdutoIdAndUser(@Param("produtoId") Long produtoId, @Param("user") User user);
 
-    // 🆕 Buscar itens por período E USUÁRIO
-    @Query("SELECT iv FROM ItemVenda iv WHERE iv.venda.data BETWEEN :inicio AND :fim AND iv.user = :user")
-    List<ItemVenda> findByPeriodoAndUser(@Param("inicio") java.time.LocalDateTime inicio,
-                                         @Param("fim") java.time.LocalDateTime fim,
-                                         @Param("user") User user);
+    // ✅ NOVO MÉTODO: Buscar itens por lote
+    @Query("SELECT i FROM ItemVenda i WHERE i.lote.id = :loteId AND i.user = :user")
+    List<ItemVenda> findByLoteIdAndUser(@Param("loteId") Long loteId, @Param("user") User user);
 
-    // 🆕 Consultar custo total dos itens por venda DO USUÁRIO
-    @Query("SELECT SUM(iv.custoUnitario * iv.quantidade) FROM ItemVenda iv WHERE iv.venda = :venda AND iv.user = :user")
-    Double findCustoTotalByVendaAndUser(@Param("venda") Venda venda, @Param("user") User user);
+    // ✅ NOVO MÉTODO: Buscar itens processados pelo PEPS
+    @Query("SELECT i FROM ItemVenda i WHERE i.processadoPeps = true AND i.user = :user")
+    List<ItemVenda> findProcessadosByUser(@Param("user") User user);
 
-    // 🆕 Consultar quantidade total vendida por produto DO USUÁRIO
-    @Query("SELECT iv.lote.produto.nome, SUM(iv.quantidade) FROM ItemVenda iv WHERE iv.user = :user GROUP BY iv.lote.produto.nome")
-    List<Object[]> findQuantidadeVendidaPorProduto(@Param("user") User user);
+    // ✅ NOVO MÉTODO: Buscar itens NÃO processados pelo PEPS
+    @Query("SELECT i FROM ItemVenda i WHERE i.processadoPeps = false AND i.user = :user")
+    List<ItemVenda> findNaoProcessadosByUser(@Param("user") User user);
 
-    // Contar quantos itens uma venda possui DO USUÁRIO
-    Long countByVendaAndUser(Venda venda, User user);
-
-    // Verificar se existem itens para um lote específico DO USUÁRIO
+    // ✅ MÉTODO EXISTENTE: Verificar se existe item com lote específico
     boolean existsByLoteIdAndUser(Long loteId, User user);
 
-    // 🆕 Contar total de itens do usuário
-    long countByUser(User user);
+    // ✅ NOVO MÉTODO: Buscar itens por venda ID
+    @Query("SELECT i FROM ItemVenda i WHERE i.venda.id = :vendaId AND i.user = :user AND i.produto IS NOT NULL")
+    List<ItemVenda> findByVendaIdAndUser(@Param("vendaId") Long vendaId, @Param("user") User user);
 
-    // ✅ MÉTODOS LEGACY (MANTIDOS PARA COMPATIBILIDADE - USAR COM CAUTELA)
+    // ✅ NOVO MÉTODO: Calcular quantidade total vendida de um produto
+    @Query("SELECT COALESCE(SUM(i.quantidade), 0) FROM ItemVenda i WHERE i.produto.id = :produtoId AND i.user = :user")
+    Integer calcularQuantidadeVendidaPorProduto(@Param("produtoId") Long produtoId, @Param("user") User user);
 
-    // @deprecated - Use findByVendaAndUser em vez disso
-    @Deprecated
-    List<ItemVenda> findByVenda(Venda venda);
+    // ✅ NOVO MÉTODO: Calcular custo total de vendas por produto
+    @Query("SELECT COALESCE(SUM(i.custoUnitario * i.quantidade), 0) FROM ItemVenda i WHERE i.produto.id = :produtoId AND i.user = :user")
+    Double calcularCustoTotalPorProduto(@Param("produtoId") Long produtoId, @Param("user") User user);
 
-    // @deprecated - Use findByLoteIdAndUser em vez disso
-    @Deprecated
-    List<ItemVenda> findByLoteId(Long loteId);
+    // ✅ NOVO MÉTODO: Calcular faturamento total por produto
+    @Query("SELECT COALESCE(SUM(i.precoUnitario * i.quantidade), 0) FROM ItemVenda i WHERE i.produto.id = :produtoId AND i.user = :user")
+    Double calcularFaturamentoTotalPorProduto(@Param("produtoId") Long produtoId, @Param("user") User user);
 
-    // @deprecated - Use countByVendaAndUser em vez disso
-    @Deprecated
-    Long countByVenda(Venda venda);
+    // ✅ MÉTODO EXISTENTE: Deletar itens por venda
+    void deleteByVenda(Venda venda);
 
-    // @deprecated - Use existsByLoteIdAndUser em vez disso
-    @Deprecated
-    boolean existsByLoteId(Long loteId);
+    // ✅ NOVO MÉTODO: Deletar itens por produto
+    void deleteByProdutoIdAndUser(Long produtoId, User user);
+
+    // ✅ NOVO MÉTODO v46.8.2: Deletar itens com produto null para um usuário específico
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM ItemVenda i WHERE i.produto IS NULL AND i.user = :user")
+    int deleteByProdutoIsNullAndUser(@Param("user") User user);
+
+    // ✅ NOVO MÉTODO: Buscar itens com produto null (para limpeza)
+    @Query("SELECT i FROM ItemVenda i WHERE i.produto IS NULL AND i.user = :user")
+    List<ItemVenda> findByProdutoIsNullAndUser(@Param("user") User user);
+
+    // ✅ NOVO MÉTODO: Verificar se venda tem itens
+    @Query("SELECT CASE WHEN COUNT(i) > 0 THEN true ELSE false END FROM ItemVenda i WHERE i.venda = :venda AND i.user = :user")
+    boolean existsByVendaAndUser(@Param("venda") Venda venda, @Param("user") User user);
+
+    // 🚀🚀🚀 NOVO MÉTODO PARA CORREÇÃO DO ESTOQUE SERVICE 🚀🚀🚀
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM ItemVenda i WHERE i.venda.id = :vendaId AND i.user = :user")
+    void deleteAllByVendaIdAndUser(@Param("vendaId") Long vendaId, @Param("user") User user);
 }

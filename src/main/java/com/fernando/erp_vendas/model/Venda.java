@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "venda")
@@ -15,16 +17,16 @@ public class Venda {
     private Long id;
 
     @Column(name = "data", nullable = false)
-    private LocalDateTime data; // ✅ CORRIGIDO: Removido valor padrão
+    private LocalDateTime data;
 
     @Column(name = "id_pedido", unique = true)
     private String idPedido;
 
     private String plataforma;
 
-    // Preços e custos
+    // --- Preços e Custos ---
     @Column(name = "preco_venda")
-    private Double precoVenda = 0.0; // ⚠️ AGORA: PREÇO TOTAL da venda (soma de todos os produtos)
+    private Double precoVenda = 0.0;
 
     @Column(name = "frete_pago_pelo_cliente")
     private Double fretePagoPeloCliente = 0.0;
@@ -36,26 +38,25 @@ public class Venda {
     private Double tarifaPlataforma = 0.0;
 
     @Column(name = "custo_produto_vendido")
-    private Double custoProdutoVendido = 0.0; // ✅ SOMA dos custos de TODOS os produtos (PEPS)
+    private Double custoProdutoVendido = 0.0;
 
     @Column(name = "despesas_operacionais")
     private Double despesasOperacionais = 0.0;
 
-    // ✅ Multi-tenancy
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @JsonIgnore
     private User user;
 
-    // ✅ Rastreamento PEPS - AGORA: Lista de produtos da venda
-    @OneToMany(mappedBy = "venda", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    // ✅ CORREÇÃO CRÍTICA v46.9.4: orphanRemoval = true
+    // Garante que itens removidos da lista sejam DELETADOS fisicamente do banco.
+    @OneToMany(mappedBy = "venda", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     @JsonIgnore
     private List<ItemVenda> itens = new ArrayList<>();
 
-    // Construtor padrão
+    // --- Construtores ---
     public Venda() {}
 
-    // ⚠️ CONSTRUTOR ATUALIZADO: Removidos produto e quantidade
     public Venda(String idPedido, String plataforma,
                  Double precoVenda, Double fretePagoPeloCliente, Double custoEnvio,
                  Double tarifaPlataforma, Double custoProdutoVendido,
@@ -71,7 +72,7 @@ public class Venda {
         this.user = user;
     }
 
-    // Getters e Setters
+    // --- Getters e Setters ---
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -105,11 +106,24 @@ public class Venda {
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }
 
-    // ✅ MANTIDO: Lista de itens
     public List<ItemVenda> getItens() { return itens; }
-    public void setItens(List<ItemVenda> itens) { this.itens = itens; }
 
-    // ✅ NOVO: Método para adicionar item à venda
+    // ✅ ATUALIZADO: Setter inteligente para orphanRemoval e integridade referencial
+    public void setItens(List<ItemVenda> novosItens) {
+        if (this.itens == null) {
+            this.itens = new ArrayList<>();
+        }
+
+        // Limpar a lista dispara o orphanRemoval (DELETE) para os itens antigos
+        this.itens.clear();
+
+        if (novosItens != null) {
+            // Garante que cada item saiba a qual venda pertence antes de ser adicionado
+            novosItens.forEach(item -> item.setVenda(this));
+            this.itens.addAll(novosItens);
+        }
+    }
+
     public void adicionarItem(ItemVenda item) {
         if (this.itens == null) {
             this.itens = new ArrayList<>();
@@ -118,78 +132,65 @@ public class Venda {
         this.itens.add(item);
     }
 
-    // ✅ NOVO: Método para calcular quantidade total (soma de todos os itens)
+    // --- Métodos Auxiliares e de Cálculo ---
+
     public Integer getQuantidadeTotal() {
         if (itens == null || itens.isEmpty()) {
             return 0;
         }
         return itens.stream()
+                .filter(i -> i.getQuantidade() != null)
                 .mapToInt(ItemVenda::getQuantidade)
                 .sum();
     }
 
-    // ✅ NOVO: Método para calcular custo total dos produtos (soma de todos os itens)
     public Double getCustoProdutosTotal() {
         if (itens == null || itens.isEmpty()) {
             return 0.0;
         }
         return itens.stream()
+                .filter(i -> i.getCustoTotal() != null)
                 .mapToDouble(item -> item.getCustoTotal().doubleValue())
                 .sum();
     }
 
-    // ✅ CORREÇÃO: FÓRMULAS ATUALIZADAS - precoVenda já é TOTAL (soma de todos os produtos)
-
-    // 💰 FATURAMENTO = Preço Total da Venda + Frete
-    // ⚠️ NÃO multiplicar por quantidade - precoVenda já é TOTAL
     public Double calcularFaturamento() {
-        double precoTotal = getPrecoVenda(); // ✅ Já é total de todos os produtos
-        double frete = getFretePagoPeloCliente();
-        return precoTotal + frete;
+        return getPrecoVenda() + getFretePagoPeloCliente();
     }
 
-    // 💸 CUSTO EFETIVO = Custo PEPS (TOTAL) + Custo Envio + Tarifa
-    // custoProdutoVendido JÁ É TOTAL (soma de todos os produtos)
     public Double calcularCustoEfetivoTotal() {
-        double custoProduto = getCustoProdutoVendido(); // Já é total
-        double custoEnvioVal = getCustoEnvio();
-        double tarifa = getTarifaPlataforma();
-        return custoProduto + custoEnvioVal + tarifa;
+        return getCustoProdutoVendido() + getCustoEnvio() + getTarifaPlataforma();
     }
 
-    // 📊 LUCRO BRUTO = FATURAMENTO - CUSTO EFETIVO
     public Double calcularLucroBruto() {
         return calcularFaturamento() - calcularCustoEfetivoTotal();
     }
 
-    // 💵 LUCRO LÍQUIDO = LUCRO BRUTO - DESPESAS OPERACIONAIS
     public Double calcularLucroLiquido() {
-        double despesas = getDespesasOperacionais();
-        return calcularLucroBruto() - despesas;
+        return calcularLucroBruto() - getDespesasOperacionais();
     }
 
-    // 🎯 ROI = (LUCRO LÍQUIDO / CUSTO EFETIVO) × 100
     public Double calcularROI() {
         Double custoEfetivo = calcularCustoEfetivoTotal();
         Double lucroLiquido = calcularLucroLiquido();
+        // Evita divisão por zero
         return (custoEfetivo > 0) ? (lucroLiquido / custoEfetivo) * 100 : 0.0;
     }
 
-    // ✅ NOVO: Método para verificar se venda tem produtos
     public boolean temProdutos() {
         return itens != null && !itens.isEmpty();
     }
 
-    // ✅ NOVO: Método para obter lista de produtos distintos
+    // ✅ ATUALIZADO: Usa o campo direto 'produto' do ItemVenda (v46.8.2)
+    // Mais seguro do que depender de getLote() caso o lote tenha sido removido
     public List<Produto> getProdutosDistintos() {
         if (itens == null || itens.isEmpty()) {
             return new ArrayList<>();
         }
         return itens.stream()
-                .map(ItemVenda::getLote)
-                .filter(lote -> lote != null && lote.getProduto() != null)
-                .map(EntradaEstoque::getProduto)
+                .map(ItemVenda::getProduto) // Uso direto do relacionamento ItemVenda -> Produto
+                .filter(Objects::nonNull)
                 .distinct()
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
     }
 }

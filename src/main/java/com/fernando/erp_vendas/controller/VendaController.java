@@ -22,7 +22,7 @@ import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/vendas")
-@SuppressWarnings("unchecked") // ✅ ADICIONADO PARA EVITAR WARNINGS
+@SuppressWarnings("unchecked")
 public class VendaController {
 
     @Autowired
@@ -46,38 +46,34 @@ public class VendaController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
-    // ✅✅✅ CORRIGIDO COMPLETAMENTE: Método para extrair data (agora aceita apenas data sem hora)
+    // ✅✅✅ CORRIGIDO COMPLETAMENTE: Método para extrair data
     private LocalDateTime extrairData(Object dataObj) {
         if (dataObj == null || dataObj.toString().isEmpty()) {
-            return null; // ⚠️ IMPORTANTE: não usar LocalDateTime.now()
+            return null;
         }
 
         String dataString = dataObj.toString().trim();
-        System.out.println("📅 [DEBUG-v46.6] DEBUG DATA - String recebida: '" + dataString + "'");
+        System.out.println("📅 [DEBUG-v46.9] DEBUG DATA - String recebida: '" + dataString + "'");
 
         try {
             // ✅ FORMATO ESPERADO: "YYYY-MM-DD" (apenas data, sem hora)
-            // Converter para LocalDateTime com hora 00:00:00
             LocalDate dataApenas = LocalDate.parse(dataString);
-            return dataApenas.atStartOfDay(); // 00:00:00
+            return dataApenas.atStartOfDay();
 
         } catch (Exception e1) {
             try {
-                // ✅ Se vier com formato ISO (backward compatibility): "YYYY-MM-DDTHH:mm:ss"
                 if (dataString.contains("T")) {
                     return LocalDateTime.parse(dataString);
                 } else {
-                    // Tentar outros formatos de data
                     LocalDate dataApenas = LocalDate.parse(dataString, DateTimeFormatter.ISO_LOCAL_DATE);
                     return dataApenas.atStartOfDay();
                 }
             } catch (Exception e2) {
                 try {
-                    // ✅ Tentar formato com espaço: "YYYY-MM-DD HH:mm:ss"
                     String comT = dataString.replace(" ", "T");
                     return LocalDateTime.parse(comT);
                 } catch (Exception e3) {
-                    System.out.println("❌ [DEBUG-v46.6] ERRO DATA - Formato inválido: " + dataString +
+                    System.out.println("❌ [DEBUG-v46.9] ERRO DATA - Formato inválido: " + dataString +
                             ". Esperado: YYYY-MM-DD (apenas data)");
                     return null;
                 }
@@ -97,11 +93,11 @@ public class VendaController {
         }
     }
 
-    // ✅✅✅ CORRIGIDO COMPLETAMENTE: POST - Criar nova venda com MÚLTIPLOS PRODUTOS E DATA CORRETA
+    // ✅✅✅ ATUALIZADO v46.9: POST - CRIAR VENDA
     @PostMapping
     public ResponseEntity<?> criarVenda(@RequestBody Map<String, Object> vendaData) {
         try {
-            System.out.println("🔍 [DEBUG-v46.6] INICIAL - Criar venda - Dados recebidos: " + vendaData);
+            System.out.println("🔍 [DEBUG-v46.9] INICIAL - Criar venda - Dados recebidos: " + vendaData);
 
             User currentUser = getCurrentUser();
 
@@ -116,7 +112,6 @@ public class VendaController {
             String plataforma = vendaData.get("plataforma").toString();
             Double precoVenda = Double.valueOf(vendaData.get("precoVenda").toString());
 
-            // ✅✅✅ CORREÇÃO CRÍTICA: EXTRAIR E VALIDAR DATA
             LocalDateTime dataVenda = extrairData(vendaData.get("data"));
             if (dataVenda == null) {
                 return ResponseEntity.badRequest()
@@ -132,10 +127,6 @@ public class VendaController {
             // ✅ 3️⃣ VALIDAR E EXTRAIR ITENS DA VENDA
             List<Map<String, Object>> itensData = (List<Map<String, Object>>) vendaData.get("itens");
 
-            // ✅✅✅ ADICIONAR LOGS CRÍTICOS AQUI
-            System.out.println("🔍 [DEBUG-v46.6] ITENS - Tipo: " + (itensData != null ? itensData.getClass().getName() : "null"));
-            System.out.println("🔍 [DEBUG-v46.6] ITENS - Tamanho: " + (itensData != null ? itensData.size() : "null"));
-
             if (itensData == null || itensData.isEmpty()) {
                 return ResponseEntity.badRequest().body("A venda deve conter pelo menos um produto");
             }
@@ -143,11 +134,8 @@ public class VendaController {
             // ✅ DEBUG DETALHADO DE CADA ITEM
             for (int i = 0; i < itensData.size(); i++) {
                 Map<String, Object> item = itensData.get(i);
-                System.out.println("🔍 [DEBUG-v46.6] ITEM " + i + ": " + item);
-                System.out.println("   produtoId: " + item.get("produtoId"));
-                System.out.println("   quantidade: " + item.get("quantidade"));
+                System.out.println("🔍 [DEBUG-v46.9] ITEM " + i + ": " + item);
 
-                // ✅ VALIDAR CAMPOS OBRIGATÓRIOS NO ITEM
                 if (!item.containsKey("produtoId") || item.get("produtoId") == null) {
                     return ResponseEntity.badRequest().body("Item " + i + " não contém produtoId");
                 }
@@ -163,7 +151,7 @@ public class VendaController {
 
             // ✅ 5️⃣ CRIAR A VENDA (SEM PRODUTOS AINDA)
             Venda venda = new Venda();
-            venda.setData(dataVenda); // ✅ AGORA COM DATA CORRETA
+            venda.setData(dataVenda);
             venda.setIdPedido(idPedido);
             venda.setPlataforma(plataforma);
             venda.setPrecoVenda(precoVenda);
@@ -173,39 +161,32 @@ public class VendaController {
             venda.setDespesasOperacionais(despesasOperacionais);
             venda.setUser(currentUser);
 
-            // ✅ 6️⃣ CRIAR LISTA DE ITENS PRELIMINARES (APENAS COM PRODUTO E QUANTIDADE)
+            // ✅✅✅ CORREÇÃO: CRIAR ITENS COM VALORES PADRÃO
             List<ItemVenda> itensPreliminares = new ArrayList<>();
             for (Map<String, Object> itemData : itensData) {
-                // ✅✅✅ EXTRAÇÃO SEGURA COM TRY-CATCH
+                // Extrair dados
                 Long produtoId;
                 Integer quantidade;
 
                 try {
                     produtoId = Long.valueOf(itemData.get("produtoId").toString());
-                } catch (Exception e) {
-                    return ResponseEntity.badRequest().body("Erro no produtoId: " + e.getMessage());
-                }
-
-                try {
                     quantidade = Integer.valueOf(itemData.get("quantidade").toString());
                 } catch (Exception e) {
-                    return ResponseEntity.badRequest().body("Erro na quantidade: " + e.getMessage());
+                    return ResponseEntity.badRequest().body("Erro nos dados do item: " + e.getMessage());
                 }
 
-                // ✅✅✅ CORREÇÃO v46.6: Extrair precoUnitarioVenda do frontend
+                // Extrair precoUnitarioVenda
                 BigDecimal precoUnitario = BigDecimal.ZERO;
                 if (itemData.containsKey("precoUnitarioVenda") && itemData.get("precoUnitarioVenda") != null) {
                     try {
                         precoUnitario = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
-                        System.out.println("💰 [DEBUG-v46.6] precoUnitarioVenda extraído: " + precoUnitario);
+                        System.out.println("💰 [DEBUG-v46.9] precoUnitarioVenda extraído: " + precoUnitario);
                     } catch (Exception e) {
-                        System.out.println("⚠️ [DEBUG-v46.6] precoUnitarioVenda inválido, usando 0: " + e.getMessage());
+                        System.out.println("⚠️ [DEBUG-v46.9] precoUnitarioVenda inválido, usando 0: " + e.getMessage());
                     }
-                } else {
-                    System.out.println("⚠️ [DEBUG-v46.6] precoUnitarioVenda não encontrado no item");
                 }
 
-                // ✅ VERIFICAR SE O PRODUTO EXISTE E PERTENCE AO USUÁRIO
+                // Buscar produto
                 Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
                 if (!produtoOpt.isPresent()) {
                     return ResponseEntity.badRequest()
@@ -213,48 +194,47 @@ public class VendaController {
                 }
                 Produto produto = produtoOpt.get();
 
-                // ✅ VERIFICAR ESTOQUE PARA ESTE PRODUTO
-                Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
-                if (saldoDisponivel < quantidade) {
+                // ✅✅✅ VERIFICAR ESTOQUE
+                if (!estoqueService.verificarEstoqueSuficiente(produto, quantidade)) {
+                    Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
                     return ResponseEntity.badRequest()
                             .body("Estoque insuficiente para produto: " + produto.getNome() +
                                     ". Disponível: " + saldoDisponivel + ", Necessário: " + quantidade);
                 }
 
-                // ✅ ENCONTRAR O PRÓXIMO LOTE DISPONÍVEL (PEPS)
-                EntradaEstoque lotePreliminar = entradaEstoqueRepository
-                        .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAsc(produto, currentUser, 0)
-                        .stream()
-                        .findFirst()
-                        .orElseThrow(() -> new RuntimeException("Produto sem estoque: " + produto.getNome()));
-
-                // ✅ CRIAR ITEM PRELIMINAR COM precoUnitario
+                // ✅✅✅ CORREÇÃO: Criar ItemVenda com valores padrão
                 ItemVenda itemPreliminar = new ItemVenda();
                 itemPreliminar.setVenda(venda);
-                itemPreliminar.setLote(lotePreliminar);
+                itemPreliminar.setProduto(produto);
                 itemPreliminar.setQuantidade(quantidade);
-                itemPreliminar.setCustoUnitario(lotePreliminar.getCustoUnitario());
-                itemPreliminar.setPrecoUnitario(precoUnitario); // ✅✅✅ ADICIONADO
+                itemPreliminar.setPrecoUnitario(precoUnitario);
                 itemPreliminar.setUser(currentUser);
+                itemPreliminar.setCustoUnitario(BigDecimal.ZERO);
+                itemPreliminar.setProcessadoPeps(false);
 
                 itensPreliminares.add(itemPreliminar);
+                System.out.println("✅ [DEBUG-v46.9] Item criado: " + produto.getNome() + " x" + quantidade);
             }
 
-            // ✅ 7️⃣ ADICIONAR ITENS À VENDA
+            // ✅ 6️⃣ ADICIONAR ITENS À VENDA
             venda.setItens(itensPreliminares);
 
-            // ✅ 8️⃣ SALVAR VENDA E PROCESSAR PEPS
-            estoqueService.calcularCustoVendaERegistrarItens(venda);
+            // ✅ 7️⃣ PROCESSAR VENDA COM PEPS CORRETO
+            System.out.println("🔄 [DEBUG-v46.9] Processando venda com PEPS...");
+            try {
+                estoqueService.processarVendaComPeps(venda);
+            } catch (Exception e) {
+                System.out.println("❌ [DEBUG-v46.9] Erro no processamento PEPS: " + e.getMessage());
+                throw e;
+            }
 
-            // ✅ 9️⃣ BUSCAR VENDA COMPLETA (COM ITENS PERSISTIDOS)
+            // ✅ 8️⃣ BUSCAR VENDA COMPLETA
             Optional<Venda> vendaCompleta = vendaRepository.findByIdPedidoAndUser(idPedido, currentUser);
             if (!vendaCompleta.isPresent()) {
                 throw new RuntimeException("Erro ao recuperar venda criada: " + idPedido);
             }
 
-            System.out.println("✅ [DEBUG-v46.6] Venda criada com sucesso: " + vendaCompleta.get().getIdPedido() +
-                    ", Data: " + vendaCompleta.get().getData() +
-                    ", Total produtos: " + vendaCompleta.get().getItens().size());
+            System.out.println("✅✅✅ [DEBUG-v46.9] Venda criada com sucesso: " + vendaCompleta.get().getIdPedido());
 
             return ResponseEntity.ok(new VendaDTO(vendaCompleta.get()));
 
@@ -263,62 +243,240 @@ public class VendaController {
         } catch (ClassCastException e) {
             return ResponseEntity.badRequest().body("Erro de tipo de dados: " + e.getMessage());
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.6] Erro ao criar venda: " + e.getMessage());
+            System.out.println("❌ [DEBUG-v46.9] Erro ao criar venda: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao criar venda: " + e.getMessage());
         }
     }
 
-    // ✅✅✅✅✅ CORREÇÃO v46.6: PUT - Atualizar venda existente COM PROCESSAMENTO DE ITENS
+    // ✅✅✅ CORREÇÃO CRÍTICA v46.9: PUT - ATUALIZAR VENDA INTELIGENTE
     @PutMapping("/{id}")
     public ResponseEntity<?> atualizarVenda(@PathVariable Long id, @RequestBody Map<String, Object> vendaData) {
         try {
-            System.out.println("🔄 [DEBUG-v46.6] ATUALIZAR-VENDA - Iniciando atualização da venda ID: " + id);
-            System.out.println("🔄 [DEBUG-v46.6] Dados recebidos do frontend: " + vendaData);
+            System.out.println("🔄 [DEBUG-v46.9] ATUALIZAR-VENDA - Iniciando atualização da venda ID: " + id);
+            System.out.println("🔍 [DEBUG-v46.9] Dados recebidos: " + vendaData.keySet());
 
             User currentUser = getCurrentUser();
 
             // ✅ 1️⃣ BUSCAR VENDA EXISTENTE
             Optional<Venda> vendaExistenteOpt = vendaRepository.findByIdAndUser(id, currentUser);
             if (!vendaExistenteOpt.isPresent()) {
-                System.out.println("❌ [DEBUG-v46.6] Venda não encontrada: " + id);
+                System.out.println("❌ [DEBUG-v46.9] Venda não encontrada: " + id);
                 return ResponseEntity.notFound().build();
             }
 
             Venda vendaExistente = vendaExistenteOpt.get();
-            System.out.println("✅ [DEBUG-v46.6] Venda encontrada: " + vendaExistente.getIdPedido());
+            System.out.println("✅ [DEBUG-v46.9] Venda encontrada: " + vendaExistente.getIdPedido());
+            System.out.println("📊 [DEBUG-v46.9] Itens atuais: " + vendaExistente.getItens().size() + " lotes");
 
-            // ✅ 2️⃣ VERIFICAR SE JÁ EXISTE OUTRA VENDA COM MESMO ID DO PEDIDO
+            // ✅✅✅ 2️⃣ DETECTAR SE ITENS FORAM ENVIADOS
+            boolean itensEnviados = vendaData.containsKey("itens") && vendaData.get("itens") != null;
+
+            if (!itensEnviados) {
+                System.out.println("ℹ️ [DEBUG-v46.9] ATENÇÃO: Itens NÃO enviados na atualização!");
+                System.out.println("ℹ️ [DEBUG-v46.9] Atualizando apenas campos básicos...");
+
+                // ✅ APENAS ATUALIZAR CAMPOS BÁSICOS - NÃO REPROCESSAR PEPS
+                boolean camposModificados = false;
+
+                if (vendaData.containsKey("idPedido")) {
+                    String novoIdPedido = vendaData.get("idPedido").toString();
+                    Optional<Venda> vendaComMesmoPedido = vendaRepository.findByIdPedidoAndUser(novoIdPedido, currentUser);
+                    if (vendaComMesmoPedido.isPresent() && !vendaComMesmoPedido.get().getId().equals(id)) {
+                        System.out.println("❌ [DEBUG-v46.9] ID do pedido já existe: " + novoIdPedido);
+                        return ResponseEntity.badRequest().body("Já existe outra venda com este ID do pedido");
+                    }
+                    vendaExistente.setIdPedido(novoIdPedido);
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("plataforma")) {
+                    vendaExistente.setPlataforma(vendaData.get("plataforma").toString());
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("data")) {
+                    LocalDateTime novaData = extrairData(vendaData.get("data"));
+                    if (novaData == null) {
+                        return ResponseEntity.badRequest()
+                                .body("Formato de data inválido. Esperado: YYYY-MM-DD");
+                    }
+                    vendaExistente.setData(novaData);
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("precoVenda")) {
+                    vendaExistente.setPrecoVenda(Double.valueOf(vendaData.get("precoVenda").toString()));
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("fretePagoPeloCliente")) {
+                    vendaExistente.setFretePagoPeloCliente(getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0));
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("custoEnvio")) {
+                    vendaExistente.setCustoEnvio(getDoubleValue(vendaData.get("custoEnvio"), 0.0));
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("tarifaPlataforma")) {
+                    vendaExistente.setTarifaPlataforma(getDoubleValue(vendaData.get("tarifaPlataforma"), 0.0));
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("despesasOperacionais")) {
+                    vendaExistente.setDespesasOperacionais(getDoubleValue(vendaData.get("despesasOperacionais"), 0.0));
+                    camposModificados = true;
+                }
+
+                if (!camposModificados) {
+                    System.out.println("⚠️ [DEBUG-v46.9] Nenhum campo modificado, retornando venda atual");
+                    return ResponseEntity.ok(new VendaDTO(vendaExistente));
+                }
+
+                // ✅ SALVAR VENDA ATUALIZADA (SEM REPROCESSAR PEPS)
+                Venda vendaSalva = vendaRepository.save(vendaExistente);
+                System.out.println("✅✅✅ [DEBUG-v46.9] VENDA ATUALIZADA SEM REPROCESSAR PEPS!");
+                System.out.println("📊 [DEBUG-v46.9] Lotes mantidos: " + vendaSalva.getItens().size());
+
+                return ResponseEntity.ok(new VendaDTO(vendaSalva));
+            }
+
+            // ✅✅✅ 3️⃣ ITENS ENVIADOS - VERIFICAR SE QUANTIDADES MUDARAM
+            List<Map<String, Object>> itensData = (List<Map<String, Object>>) vendaData.get("itens");
+            System.out.println("🔍 [DEBUG-v46.9] Itens recebidos: " + itensData.size());
+
+            // Mapear quantidades originais por produto
+            Map<Long, Integer> quantidadesOriginais = new HashMap<>();
+            Map<Long, ItemVenda> itensPorProduto = new HashMap<>();
+
+            for (ItemVenda itemOriginal : vendaExistente.getItens()) {
+                if (itemOriginal.getProduto() != null) {
+                    Long produtoId = itemOriginal.getProduto().getId();
+                    quantidadesOriginais.merge(produtoId, itemOriginal.getQuantidade(), Integer::sum);
+                    itensPorProduto.putIfAbsent(produtoId, itemOriginal);
+                }
+            }
+
+            // Mapear novas quantidades
+            Map<Long, Integer> quantidadesNovas = new HashMap<>();
+            boolean quantidadeMudou = false;
+
+            for (Map<String, Object> itemData : itensData) {
+                Long produtoId = Long.valueOf(itemData.get("produtoId").toString());
+                Integer quantidade = Integer.valueOf(itemData.get("quantidade").toString());
+                quantidadesNovas.merge(produtoId, quantidade, Integer::sum);
+            }
+
+            // Comparar quantidades
+            for (Long produtoId : quantidadesNovas.keySet()) {
+                Integer quantidadeOriginal = quantidadesOriginais.getOrDefault(produtoId, 0);
+                Integer quantidadeNova = quantidadesNovas.get(produtoId);
+
+                if (!quantidadeOriginal.equals(quantidadeNova)) {
+                    quantidadeMudou = true;
+                    System.out.println("⚠️ [DEBUG-v46.9] Quantidade alterada! Produto " + produtoId +
+                            ": " + quantidadeOriginal + " → " + quantidadeNova);
+                    break;
+                }
+            }
+
+            // ✅✅✅ 4️⃣ DECISÃO: REPROCESSAR PEPS OU NÃO?
+            if (!quantidadeMudou) {
+                System.out.println("✅✅✅ [DEBUG-v46.9] ATENÇÃO: Quantidades NÃO alteradas!");
+                System.out.println("✅✅✅ [DEBUG-v46.9] NÃO reaplicando PEPS - mantendo lotes originais!");
+
+                // ✅ ATUALIZAR CAMPOS BÁSICOS (como no caso sem itens)
+                boolean camposModificados = false;
+
+                if (vendaData.containsKey("idPedido")) {
+                    String novoIdPedido = vendaData.get("idPedido").toString();
+                    Optional<Venda> vendaComMesmoPedido = vendaRepository.findByIdPedidoAndUser(novoIdPedido, currentUser);
+                    if (vendaComMesmoPedido.isPresent() && !vendaComMesmoPedido.get().getId().equals(id)) {
+                        return ResponseEntity.badRequest().body("Já existe outra venda com este ID do pedido");
+                    }
+                    vendaExistente.setIdPedido(novoIdPedido);
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("plataforma")) {
+                    vendaExistente.setPlataforma(vendaData.get("plataforma").toString());
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("data")) {
+                    LocalDateTime novaData = extrairData(vendaData.get("data"));
+                    if (novaData != null) {
+                        vendaExistente.setData(novaData);
+                        camposModificados = true;
+                    }
+                }
+
+                if (vendaData.containsKey("precoVenda")) {
+                    vendaExistente.setPrecoVenda(Double.valueOf(vendaData.get("precoVenda").toString()));
+                    camposModificados = true;
+                }
+
+                // ✅ ATUALIZAR PREÇOS UNITÁRIOS SE FORNECIDOS
+                for (Map<String, Object> itemData : itensData) {
+                    if (itemData.containsKey("precoUnitarioVenda") && itemData.get("precoUnitarioVenda") != null) {
+                        try {
+                            Long produtoId = Long.valueOf(itemData.get("produtoId").toString());
+                            BigDecimal novoPreco = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
+
+                            // Atualizar todos os itens deste produto
+                            for (ItemVenda item : vendaExistente.getItens()) {
+                                if (item.getProduto() != null && item.getProduto().getId().equals(produtoId)) {
+                                    item.setPrecoUnitario(novoPreco);
+                                    camposModificados = true;
+                                }
+                            }
+                        } catch (Exception e) {
+                            System.out.println("⚠️ [DEBUG-v46.9] Erro ao atualizar preço: " + e.getMessage());
+                        }
+                    }
+                }
+
+                if (!camposModificados) {
+                    System.out.println("⚠️ [DEBUG-v46.9] Nenhum campo modificado");
+                    return ResponseEntity.ok(new VendaDTO(vendaExistente));
+                }
+
+                Venda vendaSalva = vendaRepository.save(vendaExistente);
+                System.out.println("✅✅✅ [DEBUG-v46.9] VENDA ATUALIZADA SEM REPROCESSAR PEPS!");
+                System.out.println("📊 [DEBUG-v46.9] Lotes mantidos: " + vendaSalva.getItens().size());
+
+                return ResponseEntity.ok(new VendaDTO(vendaSalva));
+            }
+
+            // ✅✅✅ 5️⃣ QUANTIDADE MUDOU - PRECISA REPROCESSAR PEPS COMPLETO
+            System.out.println("⚠️ [DEBUG-v46.9] Quantidades alteradas - reprocessando PEPS...");
+
+            // ✅ VERIFICAR SE JÁ EXISTE OUTRA VENDA COM MESMO ID DO PEDIDO
             if (vendaData.containsKey("idPedido")) {
                 String novoIdPedido = vendaData.get("idPedido").toString();
                 Optional<Venda> vendaComMesmoPedido = vendaRepository.findByIdPedidoAndUser(novoIdPedido, currentUser);
                 if (vendaComMesmoPedido.isPresent() && !vendaComMesmoPedido.get().getId().equals(id)) {
-                    System.out.println("❌ [DEBUG-v46.6] ID do pedido já existe: " + novoIdPedido);
                     return ResponseEntity.badRequest().body("Já existe outra venda com este ID do pedido");
                 }
                 vendaExistente.setIdPedido(novoIdPedido);
-                System.out.println("📝 [DEBUG-v46.6] ID do pedido atualizado: " + novoIdPedido);
             }
 
-            // ✅ 3️⃣ ATUALIZAR APENAS CAMPOS PERMITIDOS (INCLUINDO DATA)
-            if (vendaData.containsKey("data")) {
-                LocalDateTime novaData = extrairData(vendaData.get("data"));
-                if (novaData == null) {
-                    return ResponseEntity.badRequest()
-                            .body("Formato de data inválido. Esperado: YYYY-MM-DD");
-                }
-                vendaExistente.setData(novaData);
-                System.out.println("📝 [DEBUG-v46.6] Data atualizada: " + novaData);
-            }
-
+            // ✅ ATUALIZAR CAMPOS BÁSICOS
             if (vendaData.containsKey("plataforma")) {
                 vendaExistente.setPlataforma(vendaData.get("plataforma").toString());
-                System.out.println("📝 [DEBUG-v46.6] Plataforma atualizada: " + vendaData.get("plataforma"));
+            }
+
+            if (vendaData.containsKey("data")) {
+                LocalDateTime novaData = extrairData(vendaData.get("data"));
+                if (novaData != null) {
+                    vendaExistente.setData(novaData);
+                }
             }
 
             if (vendaData.containsKey("precoVenda")) {
                 vendaExistente.setPrecoVenda(Double.valueOf(vendaData.get("precoVenda").toString()));
-                System.out.println("📝 [DEBUG-v46.6] Preço venda atualizado: " + vendaData.get("precoVenda"));
             }
 
             if (vendaData.containsKey("fretePagoPeloCliente")) {
@@ -337,140 +495,89 @@ public class VendaController {
                 vendaExistente.setDespesasOperacionais(getDoubleValue(vendaData.get("despesasOperacionais"), 0.0));
             }
 
-            // ✅✅✅ 4️⃣ PROCESSAR ITENS MODIFICADOS (CORREÇÃO CRÍTICA v46.6)
-            if (vendaData.containsKey("itens")) {
-                List<Map<String, Object>> itensData = (List<Map<String, Object>>) vendaData.get("itens");
+            // ✅ REMOVER ITENS ANTIGOS E REVERTER ESTOQUE
+            System.out.println("🔄 [DEBUG-v46.9] Revertendo estoque dos itens antigos...");
+            estoqueService.reverterEstoqueVenda(vendaExistente);
+            vendaExistente.getItens().clear();
 
-                System.out.println("🔄 [DEBUG-v46.6] PROCESSANDO ITENS - Total recebido: " +
-                        (itensData != null ? itensData.size() : 0) + " itens");
+            // ✅ CRIAR NOVOS ITENS PRELIMINARES
+            List<ItemVenda> novosItensPreliminares = new ArrayList<>();
 
-                if (itensData == null || itensData.isEmpty()) {
-                    System.out.println("❌ [DEBUG-v46.6] ERRO: Lista de itens vazia ou nula");
-                    return ResponseEntity.badRequest().body("A venda deve conter pelo menos um produto");
+            for (Map<String, Object> itemData : itensData) {
+                Long produtoId;
+                Integer quantidade;
+
+                try {
+                    produtoId = Long.valueOf(itemData.get("produtoId").toString());
+                    quantidade = Integer.valueOf(itemData.get("quantidade").toString());
+                } catch (Exception e) {
+                    return ResponseEntity.badRequest()
+                            .body("Erro nos dados do produto: " + e.getMessage());
                 }
 
-                // ✅ DEBUG DETALHADO DOS ITENS RECEBIDOS
-                for (int i = 0; i < itensData.size(); i++) {
-                    Map<String, Object> item = itensData.get(i);
-                    System.out.println("🔍 [DEBUG-v46.6] ITEM " + i + " recebido: " + item);
-                }
-
-                // ✅ REMOVER ITENS ANTIGOS E REVERTER ESTOQUE
-                System.out.println("🔄 [DEBUG-v46.6] Revertendo estoque dos itens antigos...");
-                estoqueService.reverterEstoqueVenda(vendaExistente);
-                vendaExistente.getItens().clear();
-                System.out.println("✅ [DEBUG-v46.6] Itens antigos removidos e estoque revertido");
-
-                // ✅ CRIAR NOVOS ITENS
-                System.out.println("🔄 [DEBUG-v46.6] Criando novos itens...");
-                for (Map<String, Object> itemData : itensData) {
-                    // Extrair dados do item com validação
-                    Long produtoId;
-                    Integer quantidade;
-
+                // Extrair precoUnitarioVenda
+                BigDecimal precoUnitario = BigDecimal.ZERO;
+                if (itemData.containsKey("precoUnitarioVenda") && itemData.get("precoUnitarioVenda") != null) {
                     try {
-                        produtoId = Long.valueOf(itemData.get("produtoId").toString());
-                        quantidade = Integer.valueOf(itemData.get("quantidade").toString());
+                        precoUnitario = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
                     } catch (Exception e) {
-                        System.out.println("❌ [DEBUG-v46.6] Erro ao extrair dados do item: " + e.getMessage());
-                        return ResponseEntity.badRequest()
-                                .body("Erro nos dados do produto: " + e.getMessage());
+                        System.out.println("⚠️ [DEBUG-v46.9] precoUnitarioVenda inválido, usando 0: " + e.getMessage());
                     }
-
-                    // ✅✅✅ CORREÇÃO v46.6: Extrair precoUnitarioVenda do frontend
-                    BigDecimal precoUnitario = BigDecimal.ZERO;
-                    if (itemData.containsKey("precoUnitarioVenda") && itemData.get("precoUnitarioVenda") != null) {
-                        try {
-                            precoUnitario = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
-                            System.out.println("💰 [DEBUG-v46.6] precoUnitarioVenda extraído: " + precoUnitario);
-                        } catch (Exception e) {
-                            System.out.println("⚠️ [DEBUG-v46.6] precoUnitarioVenda inválido, usando 0: " + e.getMessage());
-                        }
-                    } else {
-                        System.out.println("⚠️ [DEBUG-v46.6] precoUnitarioVenda não encontrado no item");
-                    }
-
-                    // Buscar produto
-                    Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
-                    if (!produtoOpt.isPresent()) {
-                        System.out.println("❌ [DEBUG-v46.6] Produto não encontrado: ID " + produtoId);
-                        return ResponseEntity.badRequest()
-                                .body("Produto não encontrado: ID " + produtoId);
-                    }
-
-                    Produto produto = produtoOpt.get();
-                    System.out.println("✅ [DEBUG-v46.6] Produto encontrado: " + produto.getNome());
-
-                    // Verificar estoque
-                    Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
-                    if (saldoDisponivel < quantidade) {
-                        System.out.println("❌ [DEBUG-v46.6] Estoque insuficiente: " + produto.getNome() +
-                                " (Disponível: " + saldoDisponivel + ", Necessário: " + quantidade + ")");
-                        return ResponseEntity.badRequest()
-                                .body("Estoque insuficiente para produto: " + produto.getNome() +
-                                        ". Disponível: " + saldoDisponivel + ", Necessário: " + quantidade);
-                    }
-
-                    // Encontrar lote PEPS
-                    EntradaEstoque lote = entradaEstoqueRepository
-                            .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAsc(produto, currentUser, 0)
-                            .stream()
-                            .findFirst()
-                            .orElseThrow(() -> {
-                                System.out.println("❌ [DEBUG-v46.6] Produto sem estoque: " + produto.getNome());
-                                return new RuntimeException("Produto sem estoque: " + produto.getNome());
-                            });
-
-                    System.out.println("✅ [DEBUG-v46.6] Lote PEPS encontrado: ID " + lote.getId());
-
-                    // Criar novo item COM precoUnitario
-                    ItemVenda novoItem = new ItemVenda();
-                    novoItem.setVenda(vendaExistente);
-                    novoItem.setLote(lote);
-                    novoItem.setQuantidade(quantidade);
-                    novoItem.setCustoUnitario(lote.getCustoUnitario());
-                    novoItem.setPrecoUnitario(precoUnitario); // ✅✅✅ ADICIONADO
-                    novoItem.setUser(currentUser);
-
-                    vendaExistente.getItens().add(novoItem);
-                    System.out.println("✅ [DEBUG-v46.6] Item criado para produto: " + produto.getNome());
                 }
 
-                // ✅ RECALCULAR CUSTOS E ATUALIZAR ESTOQUE
-                System.out.println("🔄 [DEBUG-v46.6] Recalculando custos PEPS...");
-                estoqueService.calcularCustoVendaERegistrarItens(vendaExistente);
-                System.out.println("✅ [DEBUG-v46.6] Custo PEPS recalculado");
-            } else {
-                System.out.println("❌ [DEBUG-v46.6] ERRO: Campo 'itens' não encontrado nos dados");
-                return ResponseEntity.badRequest().body("Dados de itens não fornecidos");
+                // Buscar produto
+                Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
+                if (!produtoOpt.isPresent()) {
+                    return ResponseEntity.badRequest()
+                            .body("Produto não encontrado: ID " + produtoId);
+                }
+
+                Produto produto = produtoOpt.get();
+
+                // ✅ VERIFICAR ESTOQUE
+                if (!estoqueService.verificarEstoqueSuficiente(produto, quantidade)) {
+                    Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
+                    return ResponseEntity.badRequest()
+                            .body("Estoque insuficiente para produto: " + produto.getNome() +
+                                    ". Disponível: " + saldoDisponivel + ", Necessário: " + quantidade);
+                }
+
+                // ✅ CRIAR NOVO ITEM PRELIMINAR
+                ItemVenda novoItem = new ItemVenda();
+                novoItem.setVenda(vendaExistente);
+                novoItem.setProduto(produto);
+                novoItem.setQuantidade(quantidade);
+                novoItem.setPrecoUnitario(precoUnitario);
+                novoItem.setUser(currentUser);
+                novoItem.setCustoUnitario(BigDecimal.ZERO);
+                novoItem.setProcessadoPeps(false);
+
+                novosItensPreliminares.add(novoItem);
             }
 
-            // ✅ 5️⃣ SALVAR VENDA ATUALIZADA
-            System.out.println("🔄 [DEBUG-v46.6] Salvando venda atualizada no banco...");
+            // ✅ ADICIONAR NOVOS ITENS À VENDA
+            vendaExistente.setItens(novosItensPreliminares);
+
+            // ✅ RECALCULAR CUSTOS E ATUALIZAR ESTOQUE
+            System.out.println("🔄 [DEBUG-v46.9] Recalculando custos PEPS...");
+            estoqueService.processarVendaComPeps(vendaExistente);
+
+            // ✅ SALVAR VENDA ATUALIZADA
             Venda vendaSalva = vendaRepository.save(vendaExistente);
 
-            System.out.println("✅✅✅ [DEBUG-v46.6] VENDA ATUALIZADA COM SUCESSO: " + vendaSalva.getIdPedido());
-            System.out.println("📊 [DEBUG-v46.6] Total de itens na venda: " + vendaSalva.getItens().size());
-            System.out.println("📊 [DEBUG-v46.6] Data da venda: " + vendaSalva.getData());
+            System.out.println("✅✅✅ [DEBUG-v46.9] VENDA ATUALIZADA COM SUCESSO: " + vendaSalva.getIdPedido());
+            System.out.println("📊 [DEBUG-v46.9] Novos lotes criados: " + vendaSalva.getItens().size());
 
             return ResponseEntity.ok(new VendaDTO(vendaSalva));
 
-        } catch (NumberFormatException e) {
-            System.out.println("❌ [DEBUG-v46.6] Erro de formato numérico: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body("Erro de formato numérico: " + e.getMessage());
-        } catch (ClassCastException e) {
-            System.out.println("❌ [DEBUG-v46.6] Erro de tipo de dados: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body("Erro de tipo de dados: " + e.getMessage());
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.6] Erro ao atualizar venda: " + e.getMessage());
+            System.out.println("❌ [DEBUG-v46.9] Erro ao atualizar venda: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao atualizar venda: " + e.getMessage());
         }
     }
 
-    // ✅ ATUALIZADO: DELETE - Excluir venda com reversão de estoque DO USUÁRIO
+    // ✅ ATUALIZADO v46.9: DELETE - Excluir venda com reversão de estoque
     @DeleteMapping("/{id}")
     public ResponseEntity<?> excluirVenda(@PathVariable Long id) {
         try {
@@ -483,43 +590,33 @@ public class VendaController {
 
             Venda venda = vendaOpt.get();
 
-            // ✅ REVERTER ESTOQUE BASEADO NOS ITENS RASTREADOS
+            // ✅ REVERTER ESTOQUE
             estoqueService.reverterEstoqueVenda(venda);
 
             // Excluir a venda
             vendaRepository.deleteById(id);
 
-            System.out.println("✅ [DEBUG-v46.6] Venda excluída e estoque revertido: " + venda.getIdPedido());
+            System.out.println("✅ [DEBUG-v46.9] Venda excluída e estoque revertido: " + venda.getIdPedido());
             return ResponseEntity.noContent().build();
 
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.6] Erro ao reverter estoque na exclusão da venda: " + e.getMessage());
+            System.out.println("❌ [DEBUG-v46.9] Erro ao excluir venda: " + e.getMessage());
             return ResponseEntity.badRequest().body("Erro ao excluir venda: " + e.getMessage());
         }
     }
 
     // ========== RESTANTE DO CÓDIGO (MÉTODOS GET E DASHBOARD) ==========
 
-    // ✅ ATUALIZADO: GET - Listar todas as vendas DO USUÁRIO - AGORA COM DTO
     @GetMapping
     public ResponseEntity<List<VendaDTO>> listarTodas() {
         try {
             User currentUser = getCurrentUser();
-            System.out.println("🔍 [DEBUG-v46.6] Buscando vendas para usuário: " + currentUser.getEmail());
-
             List<Venda> vendas = vendaRepository.findByUserWithProduto(currentUser);
-            System.out.println("📊 [DEBUG-v46.6] Total de vendas encontradas: " + vendas.size());
-
-            // ✅ CONVERTER PARA DTO
             List<VendaDTO> vendasDTO = vendas.stream()
                     .map(VendaDTO::new)
                     .collect(Collectors.toList());
-
-            System.out.println("✅ [DEBUG-v46.6] Vendas convertidas para DTO: " + vendasDTO.size());
             return ResponseEntity.ok(vendasDTO);
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.6] ERRO CRÍTICO em listarTodas: " + e.getMessage());
-            e.printStackTrace();
             return ResponseEntity.badRequest().body(null);
         }
     }
@@ -541,11 +638,9 @@ public class VendaController {
         try {
             User currentUser = getCurrentUser();
             List<Venda> vendas = vendaRepository.findByPlataformaAndUser(plataforma, currentUser);
-
             List<VendaDTO> vendasDTO = vendas.stream()
                     .map(VendaDTO::new)
                     .collect(Collectors.toList());
-
             return ResponseEntity.ok(vendasDTO);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(null);
@@ -559,38 +654,30 @@ public class VendaController {
         try {
             User currentUser = getCurrentUser();
             List<Venda> vendas = vendaRepository.findByDataBetweenAndUser(inicio, fim, currentUser);
-
             List<VendaDTO> vendasDTO = vendas.stream()
                     .map(VendaDTO::new)
                     .collect(Collectors.toList());
-
             return ResponseEntity.ok(vendasDTO);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(null);
         }
     }
 
-    // ✅✅✅ ATUALIZADO: GET - Buscar venda por nome DO USUÁRIO
     @GetMapping("/produto/{nome}")
     public ResponseEntity<List<VendaDTO>> buscarPorNomeProduto(@PathVariable String nome) {
         try {
             User currentUser = getCurrentUser();
-
-            // 1. Buscar produtos com nome similar
             List<Produto> produtos = produtoRepository.findByNomeContainingAndUser(nome, currentUser);
 
             if (produtos.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
 
-            // ✅ 2. USANDO O NOVO MÉTODO: Buscar vendas que contenham algum desses produtos
             List<Venda> vendasEncontradas = new ArrayList<>();
             for (Produto produto : produtos) {
-                // ✅ USA O NOVO MÉTODO findByProdutoInItens() do VendaRepository
                 vendasEncontradas.addAll(vendaRepository.findByProdutoInItens(produto, currentUser));
             }
 
-            // Remover duplicatas (uma venda pode conter múltiplos produtos)
             List<Venda> vendasUnicas = vendasEncontradas.stream()
                     .distinct()
                     .collect(Collectors.toList());
@@ -662,22 +749,18 @@ public class VendaController {
         }
     }
 
-    // ========== MÉTODOS DO DASHBOARD (MANTIDOS) ==========
-    // ✅ ATUALIZADO: Método para calcular faturamento por plataforma DO USUÁRIO (com múltiplos produtos)
+    // ========== MÉTODOS DO DASHBOARD ==========
     private Map<String, Double> calcularFaturamentoPorPlataforma(User user) {
         List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(user);
         Map<String, Double> faturamentoPorPlataforma = new HashMap<>();
 
-        // Inicializar plataformas conhecidas
         faturamentoPorPlataforma.put("AMAZON", 0.0);
         faturamentoPorPlataforma.put("MERCADO_LIVRE", 0.0);
         faturamentoPorPlataforma.put("SHOPEE", 0.0);
 
-        // Calcular faturamento usando o novo método (já soma todos os produtos)
         for (Venda venda : vendasUsuario) {
             String plataforma = venda.getPlataforma();
             double faturamentoVenda = venda.calcularFaturamento();
-
             faturamentoPorPlataforma.put(plataforma,
                     faturamentoPorPlataforma.getOrDefault(plataforma, 0.0) + faturamentoVenda);
         }
@@ -685,17 +768,14 @@ public class VendaController {
         return faturamentoPorPlataforma;
     }
 
-    // ✅ ATUALIZADO: Método para produtos mais vendidos com faturamento DO USUÁRIO (com múltiplos produtos)
     private List<Map<String, Object>> calcularProdutosMaisVendidos(User user) {
         List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(user);
         Map<Long, Map<String, Object>> produtosMap = new HashMap<>();
 
-        // Agrupar por produto (usando ID para evitar duplicatas por nome)
         for (Venda venda : vendasUsuario) {
-            // ✅ NOVO: Processar cada item da venda
             if (venda.getItens() != null) {
                 for (ItemVenda item : venda.getItens()) {
-                    Produto produto = item.getLote().getProduto();
+                    Produto produto = item.getProduto();
                     Long produtoId = produto.getId();
 
                     if (!produtosMap.containsKey(produtoId)) {
@@ -713,8 +793,6 @@ public class VendaController {
                     double faturamentoAtual = (double) produtoInfo.get("faturamento");
                     double lucroLiquidoAtual = (double) produtoInfo.get("lucroLiquido");
 
-                    // ✅ Calcular contribuição deste item para o produto
-                    // Nota: O faturamento e lucro são distribuídos proporcionalmente ao custo do item
                     double proporcaoItem = item.getCustoTotal().doubleValue() / venda.getCustoProdutoVendido();
                     double faturamentoItem = venda.calcularFaturamento() * proporcaoItem;
                     double lucroItem = venda.calcularLucroLiquido() * proporcaoItem;
@@ -726,29 +804,24 @@ public class VendaController {
             }
         }
 
-        // Converter para lista e ordenar por quantidade vendida (decrescente)
         List<Map<String, Object>> produtosMaisVendidos = new ArrayList<>(produtosMap.values());
         produtosMaisVendidos.sort((a, b) -> {
             int quantidadeA = (int) a.get("quantidadeVendida");
             int quantidadeB = (int) b.get("quantidadeVendida");
-            return Integer.compare(quantidadeB, quantidadeA); // Ordem decrescente
+            return Integer.compare(quantidadeB, quantidadeA);
         });
 
-        // Manter apenas top 5
         return produtosMaisVendidos.size() > 5 ? produtosMaisVendidos.subList(0, 5) : produtosMaisVendidos;
     }
 
-    // ✅ ATUALIZADO: ENDPOINT DASHBOARD - VERSÃO FUNCIONAL COM MULTI-TENANCY E MÚLTIPLOS PRODUTOS
     @GetMapping("/dashboard")
     public ResponseEntity<?> getDashboard() {
         try {
             User currentUser = getCurrentUser();
             Map<String, Object> dashboard = new HashMap<>();
 
-            // Buscar todas as vendas DO USUÁRIO para calcular em tempo real
             List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(currentUser);
 
-            // ✅ CALCULAR TOTAIS USANDOS OS NOVOS MÉTODOS
             double faturamentoTotal = 0;
             double custoEfetivoTotal = 0;
             double lucroBrutoTotal = 0;
@@ -763,18 +836,15 @@ public class VendaController {
                 despesasOperacionaisTotal += venda.getDespesasOperacionais();
             }
 
-            // ✅ DADOS ATUALIZADOS
             dashboard.put("faturamentoTotal", faturamentoTotal);
             dashboard.put("custoEfetivoTotal", custoEfetivoTotal);
             dashboard.put("lucroBrutoTotal", lucroBrutoTotal);
             dashboard.put("lucroLiquidoTotal", lucroLiquidoTotal);
             dashboard.put("despesasOperacionaisTotal", despesasOperacionaisTotal);
 
-            // Calcular ROI total
             double roiTotal = (custoEfetivoTotal > 0) ? (lucroLiquidoTotal / custoEfetivoTotal) * 100 : 0;
             dashboard.put("roiTotal", roiTotal);
 
-            // ✅ DADOS EXISTENTES (agora calculados corretamente)
             dashboard.put("faturamentoPorPlataforma", calcularFaturamentoPorPlataforma(currentUser));
             dashboard.put("totalVendas", vendasUsuario.size());
 
@@ -793,7 +863,6 @@ public class VendaController {
         }
     }
 
-    // Métodos de cálculo mensal
     @GetMapping("/faturamento-mes-atual")
     public ResponseEntity<?> getFaturamentoMesAtual() {
         try {
@@ -898,7 +967,6 @@ public class VendaController {
         }
     }
 
-    // 🆕 ADICIONADO: Endpoints para dados do ANO ATUAL
     @GetMapping("/faturamento-ano-atual")
     public ResponseEntity<?> getFaturamentoAnoAtual() {
         try {
