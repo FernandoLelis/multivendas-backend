@@ -15,7 +15,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.text.SimpleDateFormat;
 import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -52,7 +51,7 @@ public class EntradaEstoqueController {
     // ✅✅✅ NOVA VERSÃO: COMPRAS COM MÚLTIPLOS PRODUTOS (v46.6)
     // ============================================================
 
-    // ✅✅✅ ATUALIZADO: POST - Criar nova COMPRA com múltiplos produtos (v46.6)
+    // ✅✅✅ ATUALIZADO: POST - Criar nova COMPRA com múltiplos produtos
     @PostMapping("/compra")
     public ResponseEntity<?> criarCompra(@RequestBody Map<String, Object> compraData) {
         try {
@@ -159,9 +158,6 @@ public class EntradaEstoqueController {
                 throw new RuntimeException("Erro ao recuperar compra criada: " + idPedidoCompra);
             }
 
-            System.out.println("✅ [DEBUG-v46.6] Compra criada: " + compraCompleta.get().getIdPedidoCompra() +
-                    ", Itens: " + compraCompleta.get().getItens().size());
-
             return ResponseEntity.ok(new CompraDTO(compraCompleta.get()));
 
         } catch (Exception e) {
@@ -171,149 +167,171 @@ public class EntradaEstoqueController {
         }
     }
 
-    // ✅✅✅✅✅ CORREÇÃO v46.6: PUT - Atualizar compra existente COM PROCESSAMENTO DE ITENS
+    // ✅✅✅✅✅ CORREÇÃO v46.9: PUT - Atualizar compra (Lógica Inteligente de Reconciliação)
     @PutMapping("/compra/{id}")
     public ResponseEntity<?> atualizarCompra(@PathVariable Long id, @RequestBody Map<String, Object> compraData) {
         try {
-            System.out.println("🔄 [DEBUG-v46.6] ATUALIZAR-COMPRA - Iniciando atualização da compra ID: " + id);
-            System.out.println("🔄 [DEBUG-v46.6] Dados recebidos: " + compraData.keySet());
-
+            System.out.println("🔄 [DEBUG-v46.9] ATUALIZAR-COMPRA - Iniciando atualização da compra ID: " + id);
             User currentUser = getCurrentUser();
 
             // ✅ 1️⃣ BUSCAR COMPRA EXISTENTE
             Optional<Compra> compraExistenteOpt = compraRepository.findByIdAndUser(id, currentUser);
             if (!compraExistenteOpt.isPresent()) {
-                System.out.println("❌ [DEBUG-v46.6] Compra não encontrada: " + id);
                 return ResponseEntity.notFound().build();
             }
-
             Compra compraExistente = compraExistenteOpt.get();
-            System.out.println("✅ [DEBUG-v46.6] Compra encontrada: " + compraExistente.getIdPedidoCompra());
 
-            // ✅ 2️⃣ VERIFICAR SE JÁ EXISTE OUTRA COMPRA COM MESMO ID DO PEDIDO
+            // ✅ 2️⃣ ATUALIZAR DADOS DE CABEÇALHO
             if (compraData.containsKey("idPedidoCompra")) {
-                String novoIdPedidoCompra = compraData.get("idPedidoCompra").toString();
-                Optional<Compra> compraComMesmoPedido = compraRepository.findByIdPedidoCompraAndUser(novoIdPedidoCompra, currentUser);
-                if (compraComMesmoPedido.isPresent() && !compraComMesmoPedido.get().getId().equals(id)) {
-                    System.out.println("❌ [DEBUG-v46.6] ID do pedido já existe: " + novoIdPedidoCompra);
-                    return ResponseEntity.badRequest().body("Já existe outra compra com este ID do pedido");
+                String novoId = compraData.get("idPedidoCompra").toString();
+                // Validar duplicidade apenas se mudou o ID
+                if (!novoId.equals(compraExistente.getIdPedidoCompra())) {
+                    Optional<Compra> duplicada = compraRepository.findByIdPedidoCompraAndUser(novoId, currentUser);
+                    if (duplicada.isPresent()) {
+                        return ResponseEntity.badRequest().body("Já existe outra compra com este ID do pedido");
+                    }
                 }
-                compraExistente.setIdPedidoCompra(novoIdPedidoCompra);
-                System.out.println("📝 [DEBUG-v46.6] ID do pedido atualizado: " + novoIdPedidoCompra);
+                compraExistente.setIdPedidoCompra(novoId);
+                // Atualizar ID Pedido nos lotes existentes também para manter consistência
+                for (ItemCompra item : compraExistente.getItens()) {
+                    if (item.getLote() != null) item.getLote().setIdPedidoCompra(novoId);
+                }
             }
 
-            // ✅ 3️⃣ ATUALIZAR CAMPOS BÁSICOS (INCLUINDO DATA)
             if (compraData.containsKey("data")) {
                 LocalDateTime novaData = extrairDataMelhorado(compraData.get("data"));
-                if (novaData != null) {
-                    compraExistente.setData(novaData);
-                    System.out.println("📝 [DEBUG-v46.6] Data atualizada: " + novaData);
-                }
+                if (novaData != null) compraExistente.setData(novaData);
             }
-
             if (compraData.containsKey("fornecedor")) {
                 compraExistente.setFornecedor(compraData.get("fornecedor").toString());
-                System.out.println("📝 [DEBUG-v46.6] Fornecedor atualizado: " + compraData.get("fornecedor"));
             }
-
             if (compraData.containsKey("observacoes")) {
                 compraExistente.setObservacoes(compraData.get("observacoes").toString());
-                System.out.println("📝 [DEBUG-v46.6] Observações atualizadas");
             }
 
-            // ✅✅✅ 4️⃣ PROCESSAR ITENS MODIFICADOS (CORREÇÃO CRÍTICA v46.6)
+            // ✅✅✅ 3️⃣ PROCESSAMENTO INTELIGENTE DE ITENS (Smart Merge)
             if (compraData.containsKey("itens")) {
                 List<Map<String, Object>> itensData = (List<Map<String, Object>>) compraData.get("itens");
 
-                System.out.println("🔄 [DEBUG-v46.6] PROCESSANDO ITENS - Total recebido: " +
-                        (itensData != null ? itensData.size() : 0) + " itens");
+                // Lista de IDs de produtos que vieram no JSON (para sabermos o que remover depois)
+                Set<Long> produtosNoJson = new HashSet<>();
 
-                if (itensData == null || itensData.isEmpty()) {
-                    System.out.println("❌ [DEBUG-v46.6] ERRO: Lista de itens vazia");
-                    return ResponseEntity.badRequest().body("A compra deve conter pelo menos um produto");
-                }
+                // A. ATUALIZAR OU ADICIONAR
+                for (Map<String, Object> itemJson : itensData) {
+                    Long produtoId = Long.valueOf(itemJson.get("produtoId").toString());
+                    Integer novaQuantidade = Integer.valueOf(itemJson.get("quantidade").toString());
+                    BigDecimal novoCusto = new BigDecimal(itemJson.get("custoUnitario").toString());
 
-                // ✅ REMOVER ITENS ANTIGOS E SEUS LOTES
-                System.out.println("🔄 [DEBUG-v46.6] Removendo itens e lotes antigos...");
+                    produtosNoJson.add(produtoId);
 
-                // Remover lotes associados aos itens antigos
-                for (ItemCompra itemAntigo : compraExistente.getItens()) {
-                    if (itemAntigo.getLote() != null) {
-                        entradaEstoqueRepository.delete(itemAntigo.getLote());
+                    // Tenta encontrar o item na lista atual da compra
+                    Optional<ItemCompra> itemExistenteOpt = compraExistente.getItens().stream()
+                            .filter(i -> i.getProduto().getId().equals(produtoId))
+                            .findFirst();
+
+                    if (itemExistenteOpt.isPresent()) {
+                        // --- ATUALIZAR EXISTENTE ---
+                        ItemCompra item = itemExistenteOpt.get();
+                        EntradaEstoque lote = item.getLote();
+
+                        // Calcular diferença de quantidade para ajustar o saldo
+                        int qtdAntiga = item.getQuantidade();
+                        int diferenca = novaQuantidade - qtdAntiga;
+
+                        // Validação de Segurança: Não permitir reduzir saldo abaixo de zero (se já consumiu)
+                        if (lote.getSaldo() + diferenca < 0) {
+                            return ResponseEntity.badRequest().body("Não é possível reduzir a quantidade do produto " +
+                                    item.getProduto().getNome() + " pois o lote já foi consumido acima do novo valor.");
+                        }
+
+                        // Atualiza Item
+                        item.setQuantidade(novaQuantidade);
+                        item.setCustoUnitario(novoCusto);
+
+                        // Atualiza Lote (Reflete mudança no estoque)
+                        lote.setQuantidade(novaQuantidade);
+                        lote.setCustoUnitario(novoCusto);
+                        lote.setCustoTotal(novoCusto.multiply(BigDecimal.valueOf(novaQuantidade)));
+                        lote.setSaldo(lote.getSaldo() + diferenca); // Atualiza saldo proporcionalmente
+                        lote.setFornecedor(compraExistente.getFornecedor()); // Garante sync
+                        lote.setDataEntrada(compraExistente.getData());
+                        lote.setIdPedidoCompra(compraExistente.getIdPedidoCompra());
+
+                        entradaEstoqueRepository.save(lote); // Salva lote atualizado
+
+                    } else {
+                        // --- CRIAR NOVO ---
+                        Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
+                        if (!produtoOpt.isPresent()) continue;
+                        Produto produto = produtoOpt.get();
+
+                        ItemCompra novoItem = new ItemCompra();
+                        novoItem.setCompra(compraExistente);
+                        novoItem.setProduto(produto);
+                        novoItem.setQuantidade(novaQuantidade);
+                        novoItem.setCustoUnitario(novoCusto);
+                        novoItem.setUser(currentUser);
+
+                        // Cria Lote
+                        EntradaEstoque novoLote = new EntradaEstoque();
+                        novoLote.setProduto(produto);
+                        novoLote.setQuantidade(novaQuantidade);
+                        novoLote.setSaldo(novaQuantidade); // Saldo inicial igual a qtd
+                        novoLote.setCustoUnitario(novoCusto);
+                        novoLote.setCustoTotal(novoCusto.multiply(BigDecimal.valueOf(novaQuantidade)));
+                        novoLote.setDataEntrada(compraExistente.getData());
+                        novoLote.setFornecedor(compraExistente.getFornecedor());
+                        novoLote.setIdPedidoCompra(compraExistente.getIdPedidoCompra());
+                        novoLote.setCategoria("COMPRA");
+                        novoLote.setObservacoes(compraExistente.getObservacoes());
+                        novoLote.setUser(currentUser);
+
+                        entradaEstoqueRepository.save(novoLote);
+                        novoItem.setLote(novoLote);
+
+                        compraExistente.getItens().add(novoItem);
                     }
                 }
 
-                // Limpar lista de itens
-                compraExistente.getItens().clear();
-                System.out.println("✅ [DEBUG-v46.6] Itens antigos removidos");
-
-                // ✅ CRIAR NOVOS ITENS
-                System.out.println("🔄 [DEBUG-v46.6] Criando novos itens...");
-                for (Map<String, Object> itemData : itensData) {
-                    // Extrair dados do item
-                    Long produtoId = Long.valueOf(itemData.get("produtoId").toString());
-                    Integer quantidade = Integer.valueOf(itemData.get("quantidade").toString());
-                    BigDecimal custoUnitario = new BigDecimal(itemData.get("custoUnitario").toString());
-
-                    // Buscar produto
-                    Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
-                    if (!produtoOpt.isPresent()) {
-                        System.out.println("❌ [DEBUG-v46.6] Produto não encontrado: ID " + produtoId);
-                        return ResponseEntity.badRequest()
-                                .body("Produto não encontrado: ID " + produtoId);
+                // B. REMOVER ITENS (QUE NÃO ESTÃO MAIS NO JSON)
+                List<ItemCompra> itensParaRemover = new ArrayList<>();
+                for (ItemCompra item : compraExistente.getItens()) {
+                    if (!produtosNoJson.contains(item.getProduto().getId())) {
+                        // Verifica se o lote já foi consumido
+                        EntradaEstoque lote = item.getLote();
+                        if (lote != null && lote.getQuantidade() > lote.getSaldo()) { // Lote usado?
+                            return ResponseEntity.badRequest().body("Não é possível remover o produto " +
+                                    item.getProduto().getNome() + " pois o lote já teve consumo (Vendas/Baixas).");
+                        }
+                        itensParaRemover.add(item);
                     }
-
-                    Produto produto = produtoOpt.get();
-                    System.out.println("✅ [DEBUG-v46.6] Produto encontrado: " + produto.getNome());
-
-                    // ✅ CRIAR NOVO ITEM DA COMPRA
-                    ItemCompra novoItem = new ItemCompra();
-                    novoItem.setCompra(compraExistente);
-                    novoItem.setProduto(produto);
-                    novoItem.setQuantidade(quantidade);
-                    novoItem.setCustoUnitario(custoUnitario);
-                    novoItem.setUser(currentUser);
-
-                    // ✅ CRIAR NOVO LOTE
-                    EntradaEstoque novoLote = new EntradaEstoque();
-                    novoLote.setProduto(produto);
-                    novoLote.setQuantidade(quantidade);
-                    novoLote.setCustoUnitario(custoUnitario);
-                    novoLote.setCustoTotal(custoUnitario.multiply(BigDecimal.valueOf(quantidade)));
-                    novoLote.setDataEntrada(compraExistente.getData());
-                    novoLote.setFornecedor(compraExistente.getFornecedor());
-                    novoLote.setIdPedidoCompra(compraExistente.getIdPedidoCompra());
-                    novoLote.setCategoria("COMPRA");
-                    novoLote.setObservacoes(compraExistente.getObservacoes());
-                    novoLote.setUser(currentUser);
-                    novoLote.setSaldo(quantidade);
-
-                    // Salvar o lote
-                    EntradaEstoque loteSalvo = entradaEstoqueRepository.save(novoLote);
-                    System.out.println("✅ [DEBUG-v46.6] Lote criado: ID " + loteSalvo.getId());
-
-                    // Associar lote ao item
-                    novoItem.setLote(loteSalvo);
-
-                    // Adicionar item à compra
-                    compraExistente.getItens().add(novoItem);
-                    System.out.println("✅ [DEBUG-v46.6] Item criado para produto: " + produto.getNome());
                 }
-            } else {
-                System.out.println("❌ [DEBUG-v46.6] ERRO: Campo 'itens' não encontrado");
-                return ResponseEntity.badRequest().body("Dados de itens não fornecidos");
+
+                // Remove efetivamente (Ordem correta para evitar FK Constraint)
+                for (ItemCompra itemRemover : itensParaRemover) {
+                    EntradaEstoque loteParaApagar = itemRemover.getLote();
+
+                    // 1. Remove da lista da compra (memória)
+                    compraExistente.getItens().remove(itemRemover);
+
+                    // 2. Apaga o ItemCompra (Banco) - Libera a FK
+                    itemCompraRepository.delete(itemRemover);
+
+                    // 3. Apaga o Lote (Banco) - Agora pode apagar
+                    if (loteParaApagar != null) {
+                        entradaEstoqueRepository.delete(loteParaApagar);
+                    }
+                }
             }
 
-            // ✅ 5️⃣ SALVAR COMPRA ATUALIZADA
-            System.out.println("🔄 [DEBUG-v46.6] Salvando compra atualizada...");
+            // ✅ 4️⃣ SALVAR COMPRA FINAL
             Compra compraSalva = compraRepository.save(compraExistente);
-
-            System.out.println("✅✅✅ [DEBUG-v46.6] COMPRA ATUALIZADA COM SUCESSO: " + compraSalva.getIdPedidoCompra());
+            System.out.println("✅ [DEBUG-v46.9] Compra atualizada com sucesso!");
 
             return ResponseEntity.ok(new CompraDTO(compraSalva));
 
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.6] Erro ao atualizar compra: " + e.getMessage());
+            System.out.println("❌ [DEBUG-v46.9] Erro fatal ao atualizar compra: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao atualizar compra: " + e.getMessage());
         }
@@ -422,13 +440,11 @@ public class EntradaEstoqueController {
     public ResponseEntity<?> listarTodasComprasUnificadas() {
         try {
             User currentUser = getCurrentUser();
-            System.out.println("🔍 [DEBUG-v46.6] Buscando compras unificadas para usuário: " + currentUser.getEmail());
 
             List<CompraDTO> todasCompras = new ArrayList<>();
 
             // ✅ 1️⃣ BUSCAR COMPRAS DO SISTEMA NOVO
             List<Compra> comprasNovas = compraRepository.findByUserOrderByDataDesc(currentUser);
-            System.out.println("📊 [DEBUG-v46.6] Compras sistema novo: " + comprasNovas.size());
 
             for (Compra compra : comprasNovas) {
                 todasCompras.add(new CompraDTO(compra));
@@ -436,14 +452,11 @@ public class EntradaEstoqueController {
 
             // ✅ 2️⃣ BUSCAR COMPRAS DO SISTEMA ANTIGO
             List<EntradaEstoque> entradas = entradaEstoqueRepository.findByUserOrderByDataEntradaDesc(currentUser);
-            System.out.println("📊 [DEBUG-v46.6] Total de entradas: " + entradas.size());
 
             // Filtrar apenas as entradas que NÃO têm item_compra_id
             List<EntradaEstoque> entradasAntigas = entradas.stream()
                     .filter(entrada -> entrada.getItemCompra() == null)
                     .collect(Collectors.toList());
-
-            System.out.println("📊 [DEBUG-v46.6] Compras sistema antigo: " + entradasAntigas.size());
 
             // ✅ 3️⃣ CONVERTER ENTRADAS ANTIGAS PARA CompraDTO
             for (EntradaEstoque entrada : entradasAntigas) {
@@ -458,11 +471,8 @@ public class EntradaEstoqueController {
                 return c2.getData().compareTo(c1.getData());
             });
 
-            System.out.println("✅ [DEBUG-v46.6] Compras unificadas: " + todasCompras.size());
             return ResponseEntity.ok(todasCompras);
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.6] Erro em listarTodasComprasUnificadas: " + e.getMessage());
-            e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao listar compras: " + e.getMessage());
         }
     }
