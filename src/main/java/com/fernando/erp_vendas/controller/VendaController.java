@@ -907,25 +907,36 @@ public class VendaController {
         }
     }
 
+    // ✅ CORREÇÃO 1: Cálculo pro-rata (dias iguais) para a variação percentual dar certo e não ficar negativa à toa
     @GetMapping("/quantidade-vendas")
     public ResponseEntity<?> getQuantidadeVendas() {
         try {
             User currentUser = getCurrentUser();
-            Long userId = currentUser.getId();
+            LocalDateTime agora = LocalDateTime.now();
+            LocalDateTime inicioMesAtual = agora.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
 
-            Long vendasMesAtual = vendaRepository.countVendasMesAtual(userId);
-            Long vendasMesAnterior = vendaRepository.countVendasMesAnterior(userId);
-            Long vendasAnoAtual = vendaRepository.countVendasAnoAtual(userId);
+            // Período correspondente do mês passado (Ex: 01/01 até o dia exato de hoje no mês passado)
+            LocalDateTime inicioMesAnterior = inicioMesAtual.minusMonths(1);
+            LocalDateTime limiteMesAnterior = agora.minusMonths(1);
+
+            // Início do ano
+            LocalDateTime inicioAno = agora.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+
+            // Conta usando as datas dinâmicas pelo Spring Data padrão
+            long vendasMesAtual = vendaRepository.findByDataBetweenAndUser(inicioMesAtual, agora, currentUser).size();
+            long vendasMesAnterior = vendaRepository.findByDataBetweenAndUser(inicioMesAnterior, limiteMesAnterior, currentUser).size();
+            long vendasAnoAtual = vendaRepository.findByDataBetweenAndUser(inicioAno, agora, currentUser).size();
 
             double variacao = 0.0;
-            if (vendasMesAnterior != null && vendasMesAnterior > 0) {
-                variacao = ((vendasMesAtual.doubleValue() - vendasMesAnterior.doubleValue())
-                        / vendasMesAnterior.doubleValue()) * 100;
+            if (vendasMesAnterior > 0) {
+                variacao = ((double) (vendasMesAtual - vendasMesAnterior) / vendasMesAnterior) * 100;
+            } else if (vendasMesAtual > 0) {
+                variacao = 100.0;
             }
 
             Map<String, Object> response = new HashMap<>();
-            response.put("mesAtual", vendasMesAtual != null ? vendasMesAtual : 0);
-            response.put("anoAtual", vendasAnoAtual != null ? vendasAnoAtual : 0);
+            response.put("mesAtual", vendasMesAtual);
+            response.put("anoAtual", vendasAnoAtual);
             response.put("variacao", variacao);
 
             return ResponseEntity.ok(response);
@@ -935,6 +946,7 @@ public class VendaController {
         }
     }
 
+    // ✅ CORREÇÃO DO SALES-CHART: Faz a SOMA ACUMULADA e previne o erro 400
     @GetMapping("/vendas-por-dia")
     public ResponseEntity<?> getVendasPorDia(
             @RequestParam(required = false) Integer mes,
@@ -942,37 +954,65 @@ public class VendaController {
 
         try {
             User currentUser = getCurrentUser();
-            List<Object[]> resultados;
-            Map<String, Integer> vendasPorDia = new HashMap<>();
 
-            if (mes != null && ano != null) {
-                resultados = vendaRepository.findVendasPorDiaDoMes(currentUser, mes, ano);
-            } else {
-                resultados = vendaRepository.findVendasPorDia(currentUser);
+            // Se não vier mês/ano, usa o atual
+            if (mes == null) mes = LocalDate.now().getMonthValue();
+            if (ano == null) ano = LocalDate.now().getYear();
+
+            // Determinar o período
+            LocalDate dataInicio = LocalDate.of(ano, mes, 1);
+            int ultimoDia = dataInicio.lengthOfMonth();
+            LocalDate dataFim = dataInicio.withDayOfMonth(ultimoDia);
+
+            // Buscar vendas de forma segura e limpa
+            LocalDateTime inicioMes = dataInicio.atStartOfDay();
+            LocalDateTime fimMes = dataFim.atTime(23, 59, 59);
+            List<Venda> vendasDoMes = vendaRepository.findByDataBetweenAndUser(inicioMes, fimMes, currentUser);
+
+            // 1. Agrupar vendas por dia
+            Map<Integer, Integer> pedidosPorDia = new HashMap<>();
+            for (Venda venda : vendasDoMes) {
+                int diaDaVenda = venda.getData().getDayOfMonth();
+                pedidosPorDia.put(diaDaVenda, pedidosPorDia.getOrDefault(diaDaVenda, 0) + 1);
             }
 
-            for (Object[] resultado : resultados) {
-                Date data = (Date) resultado[0];
-                Long quantidade = (Long) resultado[1];
+            // 2. Criar a soma acumulada
+            Map<String, Integer> retornoAcumulado = new LinkedHashMap<>(); // Linked garante a ordem no JSON
+            int totalAcumulado = 0;
 
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-                String dataStr = sdf.format(data);
+            LocalDate hoje = LocalDate.now();
+            boolean ehMesAtual = (ano == hoje.getYear() && mes == hoje.getMonthValue());
+            int diaLimite = ehMesAtual ? hoje.getDayOfMonth() : ultimoDia; // Se for mês atual, para no dia de hoje
 
-                vendasPorDia.put(dataStr, quantidade.intValue());
+            // Preenche de 1 até o último dia (ou até o dia de hoje)
+            for (int dia = 1; dia <= diaLimite; dia++) {
+                int vendasHoje = pedidosPorDia.getOrDefault(dia, 0);
+                totalAcumulado += vendasHoje;
+
+                // Formata a chave como YYYY-MM-DD
+                String dataStr = String.format("%04d-%02d-%02d", ano, mes, dia);
+                retornoAcumulado.put(dataStr, totalAcumulado);
             }
 
-            return ResponseEntity.ok(vendasPorDia);
+            return ResponseEntity.ok(retornoAcumulado);
+
         } catch (Exception e) {
+            System.out.println("❌ [DEBUG] Erro em vendas-por-dia: " + e.getMessage());
+            e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao buscar vendas por dia: " + e.getMessage());
         }
     }
 
+    // ✅ CORREÇÃO 2: Força o Java a calcular os totais anuais usando as regras da entidade Venda
     @GetMapping("/faturamento-ano-atual")
     public ResponseEntity<?> getFaturamentoAnoAtual() {
         try {
             User currentUser = getCurrentUser();
-            Double faturamento = vendaRepository.calcularFaturamentoAnoAtual(currentUser);
-            return ResponseEntity.ok(faturamento != null ? faturamento : 0.0);
+            LocalDateTime inicioAno = LocalDateTime.now().withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            List<Venda> vendasAno = vendaRepository.findByDataBetweenAndUser(inicioAno, LocalDateTime.now(), currentUser);
+
+            double faturamento = vendasAno.stream().mapToDouble(Venda::calcularFaturamento).sum();
+            return ResponseEntity.ok(faturamento);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao calcular faturamento do ano atual: " + e.getMessage());
         }
@@ -982,8 +1022,11 @@ public class VendaController {
     public ResponseEntity<?> getCustoEfetivoAnoAtual() {
         try {
             User currentUser = getCurrentUser();
-            Double custoEfetivo = vendaRepository.calcularCustoEfetivoAnoAtual(currentUser);
-            return ResponseEntity.ok(custoEfetivo != null ? custoEfetivo : 0.0);
+            LocalDateTime inicioAno = LocalDateTime.now().withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            List<Venda> vendasAno = vendaRepository.findByDataBetweenAndUser(inicioAno, LocalDateTime.now(), currentUser);
+
+            double custoEfetivo = vendasAno.stream().mapToDouble(Venda::calcularCustoEfetivoTotal).sum();
+            return ResponseEntity.ok(custoEfetivo);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao calcular custo efetivo do ano atual: " + e.getMessage());
         }
@@ -993,8 +1036,11 @@ public class VendaController {
     public ResponseEntity<?> getLucroBrutoAnoAtual() {
         try {
             User currentUser = getCurrentUser();
-            Double lucroBruto = vendaRepository.calcularLucroBrutoAnoAtual(currentUser);
-            return ResponseEntity.ok(lucroBruto != null ? lucroBruto : 0.0);
+            LocalDateTime inicioAno = LocalDateTime.now().withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            List<Venda> vendasAno = vendaRepository.findByDataBetweenAndUser(inicioAno, LocalDateTime.now(), currentUser);
+
+            double lucroBruto = vendasAno.stream().mapToDouble(Venda::calcularLucroBruto).sum();
+            return ResponseEntity.ok(lucroBruto);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Erro ao calcular lucro bruto do ano atual: " + e.getMessage());
         }
