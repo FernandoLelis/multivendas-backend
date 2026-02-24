@@ -2,6 +2,7 @@ package com.fernando.erp_vendas.controller;
 
 import com.fernando.erp_vendas.model.Produto;
 import com.fernando.erp_vendas.model.User;
+import com.fernando.erp_vendas.dto.ProdutoDTO; // 🆕 IMPORT DO DTO
 import com.fernando.erp_vendas.repository.ProdutoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -42,13 +43,16 @@ public class ProdutoController {
         }
     }
 
-    // GET - Listar todos os produtos DO USUÁRIO LOGADO
+    // 🆕 GET - Listar todos os produtos DO USUÁRIO LOGADO COM MÉTRICAS (Usando DTO)
     @GetMapping
     public ResponseEntity<?> listarTodos() {
         try {
-            System.out.println("🔐 DEBUG - Starting listarTodos()");
+            System.out.println("🔐 DEBUG - Starting listarTodos() with Metrics");
             User currentUser = getCurrentUser();
-            List<Produto> produtos = produtoRepository.findByUser(currentUser);
+
+            // 🔄 MODIFICADO: Agora busca a lista de DTOs com as métricas já calculadas
+            List<ProdutoDTO> produtos = produtoRepository.findAllWithMetricsByUser(currentUser);
+
             System.out.println("✅ DEBUG - Found " + produtos.size() + " products for user " + currentUser.getEmail());
             return ResponseEntity.ok(produtos);
         } catch (Exception e) {
