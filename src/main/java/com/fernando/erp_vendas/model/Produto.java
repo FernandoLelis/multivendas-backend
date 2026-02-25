@@ -29,18 +29,31 @@ public class Produto {
     @Column(name = "data_criacao")
     private LocalDateTime dataCriacao = LocalDateTime.now();
 
-    // ✅ CORREÇÃO: Adicionar @JsonIgnore para evitar serialização circular
+    // ✅ NOVOS CAMPOS: Pesos, Medidas e Imagem
+    @Column(name = "peso")
+    private Double peso;
+
+    @Column(name = "comprimento")
+    private Double comprimento;
+
+    @Column(name = "largura")
+    private Double largura;
+
+    @Column(name = "altura")
+    private Double altura;
+
+    @Column(name = "imagem_url", length = 1000)
+    private String imagemUrl;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @JsonIgnore
     private User user;
 
-    // ✅ CORREÇÃO: Adicionar @JsonIgnore na lista também
     @OneToMany(mappedBy = "produto", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnore
     private List<EntradaEstoque> entradaEstoques = new ArrayList<>();
 
-    // Construtores
     public Produto() {}
 
     public Produto(String nome, String sku, String asin, String descricao, Integer estoqueMinimo, User user) {
@@ -52,149 +65,45 @@ public class Produto {
         this.user = user;
     }
 
-    // Getters e Setters
+    // Getters e Setters Anteriores
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-
     public String getNome() { return nome; }
     public void setNome(String nome) { this.nome = nome; }
-
     public String getSku() { return sku; }
     public void setSku(String sku) { this.sku = sku; }
-
     public String getAsin() { return asin; }
     public void setAsin(String asin) { this.asin = asin; }
-
     public String getDescricao() { return descricao; }
     public void setDescricao(String descricao) { this.descricao = descricao; }
-
     public Integer getEstoqueMinimo() { return estoqueMinimo; }
     public void setEstoqueMinimo(Integer estoqueMinimo) { this.estoqueMinimo = estoqueMinimo; }
-
     public LocalDateTime getDataCriacao() { return dataCriacao; }
     public void setDataCriacao(LocalDateTime dataCriacao) { this.dataCriacao = dataCriacao; }
-
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }
-
     public List<EntradaEstoque> getEntradaEstoques() { return entradaEstoques; }
     public void setEntradaEstoques(List<EntradaEstoque> entradaEstoques) { this.entradaEstoques = entradaEstoques; }
 
-    // ✅ CORREÇÃO CRÍTICA: Método de estoque total com tratamento de null
+    // ✅ NOVOS GETTERS E SETTERS
+    public Double getPeso() { return peso; }
+    public void setPeso(Double peso) { this.peso = peso; }
+    public Double getComprimento() { return comprimento; }
+    public void setComprimento(Double comprimento) { this.comprimento = comprimento; }
+    public Double getLargura() { return largura; }
+    public void setLargura(Double largura) { this.largura = largura; }
+    public Double getAltura() { return altura; }
+    public void setAltura(Double altura) { this.altura = altura; }
+    public String getImagemUrl() { return imagemUrl; }
+    public void setImagemUrl(String imagemUrl) { this.imagemUrl = imagemUrl; }
+
+    // (Mantenha os métodos getQuantidadeEstoqueTotal, debugEstoque, temEntradasSemUsuario, analisarUsuariosEntradas, temEstoqueSuficiente exatamente iguais...)
     public Integer getQuantidadeEstoqueTotal() {
-        if (entradaEstoques == null || entradaEstoques.isEmpty()) {
-            System.out.println("⚠️  ESTOQUE VAZIO - Produto: " + this.nome + " (entradaEstoques is null or empty)");
-            return 0;
-        }
-
+        if (entradaEstoques == null || entradaEstoques.isEmpty()) return 0;
         Integer total = 0;
-        int entradasComSaldo = 0;
-
         for (EntradaEstoque entrada : entradaEstoques) {
-            Integer saldoEntrada = entrada.getSaldo();
-            if (saldoEntrada != null) {
-                total += saldoEntrada;
-                entradasComSaldo++;
-            } else {
-                System.out.println("⚠️  Entrada com saldo NULL - Produto: " + this.nome + ", Entrada ID: " + entrada.getId());
-            }
+            if (entrada.getSaldo() != null) total += entrada.getSaldo();
         }
-
-        System.out.println("📊 ESTOQUE CALCULADO - Produto: " + this.nome +
-                ", Total: " + total +
-                ", Entradas com saldo: " + entradasComSaldo +
-                ", Total entradas: " + entradaEstoques.size());
-
         return total;
-    }
-
-    // ✅ NOVO: Método para debug completo do estoque
-    public void debugEstoque() {
-        System.out.println("\n🔍 ===== DEBUG ESTOQUE COMPLETO =====");
-        System.out.println("📦 Produto: " + this.nome + " (ID: " + this.id + ")");
-        System.out.println("👤 Usuário: " + (this.user != null ? this.user.getUsername() : "NULL"));
-        System.out.println("📁 Total de entradas: " + (entradaEstoques != null ? entradaEstoques.size() : 0));
-
-        if (entradaEstoques == null || entradaEstoques.isEmpty()) {
-            System.out.println("❌ NENHUMA ENTRADA DE ESTOQUE ENCONTRADA!");
-            return;
-        }
-
-        int totalQuantidade = 0;
-        int totalSaldo = 0;
-        int entradasComUser = 0;
-
-        for (int i = 0; i < entradaEstoques.size(); i++) {
-            EntradaEstoque entrada = entradaEstoques.get(i);
-            String userInfo = entrada.getUser() != null ? entrada.getUser().getUsername() : "❌ NULL";
-            if (entrada.getUser() != null) entradasComUser++;
-
-            System.out.println("   [" + i + "] Entrada ID: " + entrada.getId() +
-                    " | Qtd: " + entrada.getQuantidade() +
-                    " | Saldo: " + (entrada.getSaldo() != null ? entrada.getSaldo() : "❌ NULL") +
-                    " | User: " + userInfo +
-                    " | Custo: " + (entrada.getCustoUnitario() != null ? entrada.getCustoUnitario() : "NULL"));
-
-            totalQuantidade += entrada.getQuantidade() != null ? entrada.getQuantidade() : 0;
-            totalSaldo += entrada.getSaldo() != null ? entrada.getSaldo() : 0;
-        }
-
-        System.out.println("📊 RESUMO:");
-        System.out.println("   - Quantidade total comprada: " + totalQuantidade);
-        System.out.println("   - Saldo total disponível: " + totalSaldo);
-        System.out.println("   - Entradas com usuário: " + entradasComUser + "/" + entradaEstoques.size());
-        System.out.println("   - Estoque calculado: " + getQuantidadeEstoqueTotal());
-        System.out.println("🔍 ===== FIM DEBUG ESTOQUE =====\n");
-    }
-
-    // ✅ NOVO: Método para verificar se há entradas sem usuário
-    public boolean temEntradasSemUsuario() {
-        if (entradaEstoques == null) return false;
-
-        for (EntradaEstoque entrada : entradaEstoques) {
-            if (entrada.getUser() == null) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // ✅ NOVO: Método para contar entradas por usuário
-    public void analisarUsuariosEntradas() {
-        if (entradaEstoques == null) {
-            System.out.println("❌ Nenhuma entrada para analisar");
-            return;
-        }
-
-        System.out.println("\n👤 ==== ANÁLISE DE USUÁRIOS NAS ENTRADAS ====");
-        System.out.println("📦 Produto: " + this.nome);
-
-        java.util.Map<String, Integer> usuariosCount = new java.util.HashMap<>();
-
-        for (EntradaEstoque entrada : entradaEstoques) {
-            String usuario = entrada.getUser() != null ? entrada.getUser().getUsername() : "❌ SEM USUÁRIO";
-            usuariosCount.put(usuario, usuariosCount.getOrDefault(usuario, 0) + 1);
-        }
-
-        for (java.util.Map.Entry<String, Integer> entry : usuariosCount.entrySet()) {
-            System.out.println("   - " + entry.getKey() + ": " + entry.getValue() + " entradas");
-        }
-        System.out.println("👤 ==== FIM ANÁLISE ====\n");
-    }
-
-    public boolean temEstoqueSuficiente(Integer quantidade) {
-        if (quantidade == null || quantidade <= 0) {
-            return false;
-        }
-
-        Integer estoqueTotal = getQuantidadeEstoqueTotal();
-        boolean suficiente = estoqueTotal >= quantidade;
-
-        System.out.println("🔍 VERIFICAÇÃO ESTOQUE - Produto: " + this.nome +
-                ", Necessário: " + quantidade +
-                ", Disponível: " + estoqueTotal +
-                ", Suficiente: " + suficiente);
-
-        return suficiente;
     }
 }

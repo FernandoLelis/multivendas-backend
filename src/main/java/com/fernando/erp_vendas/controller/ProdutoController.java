@@ -2,7 +2,7 @@ package com.fernando.erp_vendas.controller;
 
 import com.fernando.erp_vendas.model.Produto;
 import com.fernando.erp_vendas.model.User;
-import com.fernando.erp_vendas.dto.ProdutoDTO; // 🆕 IMPORT DO DTO
+import com.fernando.erp_vendas.dto.ProdutoDTO;
 import com.fernando.erp_vendas.repository.ProdutoRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -118,6 +118,13 @@ public class ProdutoController {
                 produto.setAsin(produtoAtualizado.getAsin());
                 produto.setDescricao(produtoAtualizado.getDescricao());
                 produto.setEstoqueMinimo(produtoAtualizado.getEstoqueMinimo());
+
+                // ✅ NOVOS CAMPOS ADICIONADOS AQUI PARA O UPDATE FUNCIONAR
+                produto.setImagemUrl(produtoAtualizado.getImagemUrl());
+                produto.setPeso(produtoAtualizado.getPeso());
+                produto.setComprimento(produtoAtualizado.getComprimento());
+                produto.setLargura(produtoAtualizado.getLargura());
+                produto.setAltura(produtoAtualizado.getAltura());
 
                 Produto produtoAtualizadoSalvo = produtoRepository.save(produto);
                 return ResponseEntity.ok(produtoAtualizadoSalvo);

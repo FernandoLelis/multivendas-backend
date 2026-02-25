@@ -36,7 +36,8 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
             "p.estoqueMinimo, p.dataCriacao, " +
             "(SELECT COALESCE(SUM(iv.quantidade), 0L) FROM ItemVenda iv WHERE iv.produto = p), " +
             "(SELECT COALESCE(AVG(ic.custoUnitario), 0.0) FROM ItemCompra ic WHERE ic.produto = p), " +
-            "(SELECT COALESCE(AVG(iv.precoUnitario), 0.0) FROM ItemVenda iv WHERE iv.produto = p)) " +
+            "(SELECT COALESCE(AVG(iv.precoUnitario), 0.0) FROM ItemVenda iv WHERE iv.produto = p), " +
+            "p.peso, p.comprimento, p.largura, p.altura, p.imagemUrl) " + // ✅ NOVOS CAMPOS ADICIONADOS AQUI
             "FROM Produto p WHERE p.user = :user")
     List<ProdutoDTO> findAllWithMetricsByUser(@Param("user") User user);
 
