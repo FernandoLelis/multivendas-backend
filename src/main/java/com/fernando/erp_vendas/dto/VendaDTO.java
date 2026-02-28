@@ -60,11 +60,14 @@ public class VendaDTO {
                             dto.setProdutoId(item.getProduto().getId());
                             dto.setProdutoNome(item.getProduto().getNome());
                             dto.setProdutoSku(item.getProduto().getSku());
+                            // ✅ O SEGREDO REVELADO: Puxando a imagem do banco para o Angular!
+                            dto.setImagemUrl(item.getProduto().getImagemUrl());
                         } else {
                             // Fallback seguro
                             dto.setProdutoId(0L);
                             dto.setProdutoNome("Produto não encontrado");
                             dto.setProdutoSku("N/A");
+                            dto.setImagemUrl(null); // ✅ Garantir que fique vazio se não houver produto
                         }
 
                         dto.setQuantidade(item.getQuantidade());

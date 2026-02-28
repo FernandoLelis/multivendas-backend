@@ -15,6 +15,9 @@ public class ItemVendaDTO {
     // ✅✅✅ CORREÇÃO v46.6: ADICIONAR CAMPO precoUnitario (PERMITE NULL PARA COMPATIBILIDADE)
     private BigDecimal precoUnitario; // Preço unitário de VENDA (o que o cliente pagou)
 
+    // ✅✅✅ NOVO CAMPO: Imagem do Produto para aparecer na listagem de Vendas
+    private String imagemUrl;
+
     // Construtor padrão - MANTIDO EXATAMENTE COMO ESTAVA
     public ItemVendaDTO() {
     }
@@ -152,6 +155,16 @@ public class ItemVendaDTO {
     public void setPrecoUnitario(BigDecimal precoUnitario) {
         this.precoUnitario = precoUnitario;
     }
+
+    // ✅✅✅ ADICIONAR: GETTER E SETTER PARA A IMAGEM
+    public String getImagemUrl() {
+        return imagemUrl;
+    }
+
+    public void setImagemUrl(String imagemUrl) {
+        this.imagemUrl = imagemUrl;
+    }
+
 
     // Método auxiliar para calcular/atualizar custoTotal - MANTIDO
     public void calcularCustoTotal() {
