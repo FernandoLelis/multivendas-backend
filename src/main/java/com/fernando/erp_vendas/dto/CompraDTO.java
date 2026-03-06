@@ -18,8 +18,6 @@ public class CompraDTO {
     private String idPedidoCompra;
     private BigDecimal totalCompra;
     private List<ItemCompraDTO> itens;
-
-    // ✅ NOVO: Campo para identificar se é do sistema antigo (entrada_estoque)
     private Boolean sistemaAntigo = false;
 
     // Classe interna para os itens
@@ -30,64 +28,47 @@ public class CompraDTO {
         private BigDecimal custoUnitario;
         private BigDecimal total;
 
-        // Construtor padrão
+        // ✅ NOVO: Campo da imagem
+        private String imagemUrl;
+
         public ItemCompraDTO() {}
 
-        // Construtor a partir de ItemCompra - CORRIGIDO
+        // Construtor a partir de ItemCompra
         public ItemCompraDTO(ItemCompra item) {
             this.produtoId = item.getProduto().getId();
             this.produtoNome = item.getProduto().getNome();
             this.quantidade = item.getQuantidade();
             this.custoUnitario = item.getCustoUnitario();
-            this.total = item.getCustoTotal(); // ✅ CORREÇÃO: getCustoTotal() em vez de getTotal()
+            this.total = item.getCustoTotal();
+
+            // ✅ O SEGREDO: Puxando a imagem do Produto associado
+            if (item.getProduto() != null) {
+                this.imagemUrl = item.getProduto().getImagemUrl();
+            }
         }
 
-        // Getters e Setters
-        public Long getProdutoId() {
-            return produtoId;
-        }
+        public Long getProdutoId() { return produtoId; }
+        public void setProdutoId(Long produtoId) { this.produtoId = produtoId; }
 
-        public void setProdutoId(Long produtoId) {
-            this.produtoId = produtoId;
-        }
+        public String getProdutoNome() { return produtoNome; }
+        public void setProdutoNome(String produtoNome) { this.produtoNome = produtoNome; }
 
-        public String getProdutoNome() {
-            return produtoNome;
-        }
+        public Integer getQuantidade() { return quantidade; }
+        public void setQuantidade(Integer quantidade) { this.quantidade = quantidade; }
 
-        public void setProdutoNome(String produtoNome) {
-            this.produtoNome = produtoNome;
-        }
+        public BigDecimal getCustoUnitario() { return custoUnitario; }
+        public void setCustoUnitario(BigDecimal custoUnitario) { this.custoUnitario = custoUnitario; }
 
-        public Integer getQuantidade() {
-            return quantidade;
-        }
+        public BigDecimal getTotal() { return total; }
+        public void setTotal(BigDecimal total) { this.total = total; }
 
-        public void setQuantidade(Integer quantidade) {
-            this.quantidade = quantidade;
-        }
-
-        public BigDecimal getCustoUnitario() {
-            return custoUnitario;
-        }
-
-        public void setCustoUnitario(BigDecimal custoUnitario) {
-            this.custoUnitario = custoUnitario;
-        }
-
-        public BigDecimal getTotal() {
-            return total;
-        }
-
-        public void setTotal(BigDecimal total) {
-            this.total = total;
-        }
+        // ✅ NOVO: Getter e Setter da imagem
+        public String getImagemUrl() { return imagemUrl; }
+        public void setImagemUrl(String imagemUrl) { this.imagemUrl = imagemUrl; }
     }
 
-    // Construtor padrão
     public CompraDTO() {}
 
-    // Construtor a partir da entidade Compra
     public CompraDTO(Compra compra) {
         this.id = compra.getId();
         this.data = compra.getData();
@@ -96,7 +77,6 @@ public class CompraDTO {
         this.idPedidoCompra = compra.getIdPedidoCompra();
         this.totalCompra = compra.getTotalCompra();
 
-        // Converter itens da compra para DTO
         if (compra.getItens() != null) {
             this.itens = compra.getItens().stream()
                     .map(ItemCompraDTO::new)
@@ -104,80 +84,33 @@ public class CompraDTO {
         }
     }
 
-    // Getters e Setters
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public LocalDateTime getData() { return data; }
+    public void setData(LocalDateTime data) { this.data = data; }
 
-    public LocalDateTime getData() {
-        return data;
-    }
+    public String getFornecedor() { return fornecedor; }
+    public void setFornecedor(String fornecedor) { this.fornecedor = fornecedor; }
 
-    public void setData(LocalDateTime data) {
-        this.data = data;
-    }
+    public String getObservacoes() { return observacoes; }
+    public void setObservacoes(String observacoes) { this.observacoes = observacoes; }
 
-    public String getFornecedor() {
-        return fornecedor;
-    }
+    public String getIdPedidoCompra() { return idPedidoCompra; }
+    public void setIdPedidoCompra(String idPedidoCompra) { this.idPedidoCompra = idPedidoCompra; }
 
-    public void setFornecedor(String fornecedor) {
-        this.fornecedor = fornecedor;
-    }
+    public BigDecimal getTotalCompra() { return totalCompra; }
+    public void setTotalCompra(BigDecimal totalCompra) { this.totalCompra = totalCompra; }
 
-    public String getObservacoes() {
-        return observacoes;
-    }
+    public List<ItemCompraDTO> getItens() { return itens; }
+    public void setItens(List<ItemCompraDTO> itens) { this.itens = itens; }
 
-    public void setObservacoes(String observacoes) {
-        this.observacoes = observacoes;
-    }
-
-    public String getIdPedidoCompra() {
-        return idPedidoCompra;
-    }
-
-    public void setIdPedidoCompra(String idPedidoCompra) {
-        this.idPedidoCompra = idPedidoCompra;
-    }
-
-    public BigDecimal getTotalCompra() {
-        return totalCompra;
-    }
-
-    public void setTotalCompra(BigDecimal totalCompra) {
-        this.totalCompra = totalCompra;
-    }
-
-    public List<ItemCompraDTO> getItens() {
-        return itens;
-    }
-
-    public void setItens(List<ItemCompraDTO> itens) {
-        this.itens = itens;
-    }
-
-    // ✅ NOVO: Getter e Setter para sistemaAntigo
-    public Boolean getSistemaAntigo() {
-        return sistemaAntigo;
-    }
-
-    public void setSistemaAntigo(Boolean sistemaAntigo) {
-        this.sistemaAntigo = sistemaAntigo;
-    }
-
-    // ✅ NOVO: Método para compatibilidade com frontend (alguns componentes usam "data" como String)
-    @JsonProperty("dataCompra")
-    public LocalDateTime getDataCompra() {
-        return data;
-    }
+    public Boolean getSistemaAntigo() { return sistemaAntigo; }
+    public void setSistemaAntigo(Boolean sistemaAntigo) { this.sistemaAntigo = sistemaAntigo; }
 
     @JsonProperty("dataCompra")
-    public void setDataCompra(LocalDateTime dataCompra) {
-        this.data = dataCompra;
-    }
+    public LocalDateTime getDataCompra() { return data; }
+
+    @JsonProperty("dataCompra")
+    public void setDataCompra(LocalDateTime dataCompra) { this.data = dataCompra; }
 }

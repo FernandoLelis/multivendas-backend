@@ -13,6 +13,9 @@ public class ItemCompraDTO {
     private Long loteId; // ID do lote criado (EntradaEstoque) - opcional na criação
     private Long userId;
 
+    // ✅ NOVO: Campo da Imagem
+    private String imagemUrl;
+
     // Construtor padrão (para criação)
     public ItemCompraDTO() {
     }
@@ -32,10 +35,10 @@ public class ItemCompraDTO {
                 : BigDecimal.ZERO;
     }
 
-    // Construtor completo (com id do ItemCompra)
+    // Construtor completo (com id do ItemCompra e imagem)
     public ItemCompraDTO(Long id, Long produtoId, String produtoNome, String produtoSku,
                          Integer quantidade, BigDecimal custoUnitario, BigDecimal custoTotal,
-                         Long loteId, Long userId) {
+                         Long loteId, Long userId, String imagemUrl) {
         this.id = id;
         this.produtoId = produtoId;
         this.produtoNome = produtoNome;
@@ -45,6 +48,7 @@ public class ItemCompraDTO {
         this.custoTotal = custoTotal;
         this.loteId = loteId;
         this.userId = userId;
+        this.imagemUrl = imagemUrl;
     }
 
     // Getters e Setters
@@ -91,6 +95,10 @@ public class ItemCompraDTO {
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
 
+    // ✅ NOVO: Getter e Setter da Imagem
+    public String getImagemUrl() { return imagemUrl; }
+    public void setImagemUrl(String imagemUrl) { this.imagemUrl = imagemUrl; }
+
     // Método auxiliar para calcular custo total
     public void calcularCustoTotal() {
         if (custoUnitario != null && quantidade != null && quantidade > 0) {
@@ -110,6 +118,7 @@ public class ItemCompraDTO {
                 ", custoTotal=" + custoTotal +
                 ", loteId=" + loteId +
                 ", userId=" + userId +
+                ", imagemUrl='" + imagemUrl + '\'' +
                 '}';
     }
 }
