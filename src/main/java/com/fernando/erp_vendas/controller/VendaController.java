@@ -1045,4 +1045,45 @@ public class VendaController {
             return ResponseEntity.badRequest().body("Erro ao calcular lucro bruto do ano atual: " + e.getMessage());
         }
     }
+
+    // ✅ NOVO: Endpoint para fornecer os dados reais do mês anterior para o cálculo de crescimento (Growth)
+    @GetMapping("/metricas-mes-anterior")
+    public ResponseEntity<?> getMetricasMesAnterior() {
+        try {
+            User currentUser = getCurrentUser();
+            LocalDateTime agora = LocalDateTime.now();
+
+            // Pega do dia 01 do mês passado até o dia/hora EXATO do mês passado (Pro-rata justo)
+            // Ex: Se hoje é 10/03 às 14h, ele compara com 01/02 até 10/02 às 14h.
+            LocalDateTime inicioMesAnterior = agora.minusMonths(1).withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            LocalDateTime limiteMesAnterior = agora.minusMonths(1);
+
+            List<Venda> vendasMesAnterior = vendaRepository.findByDataBetweenAndUser(inicioMesAnterior, limiteMesAnterior, currentUser);
+
+            double faturamento = 0;
+            double custoEfetivo = 0;
+            double lucroBruto = 0;
+            double lucroLiquido = 0;
+
+            for (Venda v : vendasMesAnterior) {
+                faturamento += v.calcularFaturamento();
+                custoEfetivo += v.calcularCustoEfetivoTotal();
+                lucroBruto += v.calcularLucroBruto();
+                lucroLiquido += v.calcularLucroLiquido();
+            }
+
+            double roi = (custoEfetivo > 0) ? (lucroLiquido / custoEfetivo) * 100 : 0;
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("faturamento", faturamento);
+            response.put("custoEfetivo", custoEfetivo);
+            response.put("lucroBruto", lucroBruto);
+            response.put("lucroLiquido", lucroLiquido);
+            response.put("roi", roi);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular métricas do mês anterior: " + e.getMessage());
+        }
+    }
 }
