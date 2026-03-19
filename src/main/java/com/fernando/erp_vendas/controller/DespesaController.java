@@ -235,6 +235,24 @@ public class DespesaController {
         }
     }
 
+    // 🆕 GET - Calcular total de despesas do mês ANTERIOR DO USUÁRIO (Novo Endpoint)
+    @GetMapping("/total-mes-anterior")
+    public ResponseEntity<?> calcularTotalMesAnterior() {
+        try {
+            User currentUser = getCurrentUser();
+
+            // Retrocede 1 mês a partir da data atual
+            LocalDate dataMesAnterior = LocalDate.now().minusMonths(1);
+            LocalDate inicioMes = dataMesAnterior.withDayOfMonth(1);
+            LocalDate fimMes = dataMesAnterior.withDayOfMonth(dataMesAnterior.lengthOfMonth());
+
+            BigDecimal total = despesaRepository.calcularTotalDespesasPorPeriodo(currentUser, inicioMes, fimMes);
+            return ResponseEntity.ok(total != null ? total : BigDecimal.ZERO);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao calcular total do mês anterior: " + e.getMessage());
+        }
+    }
+
     // ✅ ATUALIZADO: GET - Calcular total de despesas do ANO ATUAL DO USUÁRIO
     @GetMapping("/total-ano-atual")
     public ResponseEntity<?> calcularTotalDespesasAnoAtual() {
