@@ -15,11 +15,6 @@ import java.util.Optional;
 @Repository
 public interface VendaRepository extends JpaRepository<Venda, Long> {
 
-    // =========================================================================
-    // 1. QUERIES NATIVAS DO DASHBOARD (MATEMÁTICA CORRETA)
-    // =========================================================================
-
-    // Lucro por Plataforma (MENSAL)
     @Query(value = """
         SELECT 
             v.plataforma, 
@@ -39,7 +34,6 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     """, nativeQuery = true)
     List<Object[]> findLucroPorPlataformaNative(@Param("userId") Long userId, @Param("mes") int mes, @Param("ano") int ano);
 
-    // NOVO: Lucro por Plataforma (ANUAL - Sem filtro de mês)
     @Query(value = """
         SELECT 
             v.plataforma, 
@@ -58,7 +52,6 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     """, nativeQuery = true)
     List<Object[]> findLucroPorPlataformaAnualNative(@Param("userId") Long userId, @Param("ano") int ano);
 
-    // Gráfico de Vendas (Ordenado)
     @Query(value = """
         SELECT 
             CAST(v.data AS DATE) as dia, 
@@ -72,58 +65,58 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
     """, nativeQuery = true)
     List<Object[]> findVendasPorDiaDoMesNative(@Param("userId") Long userId, @Param("mes") int mes, @Param("ano") int ano);
 
+    @Query(value = """
+        SELECT 
+            p.id as produtoId,
+            p.nome as produtoNome,
+            p.imagem_url as imagemUrl,
+            SUM(i.quantidade) as quantidadeVendida,
+            AVG(i.preco_unitario) as precoMedioVenda,
+            AVG(COALESCE(i.custo_unitario, 0)) as custoMedio,
+            (AVG(i.preco_unitario) - AVG(COALESCE(i.custo_unitario, 0))) as lucroPorUnidade
+        FROM item_venda i
+        INNER JOIN venda v ON i.venda_id = v.id
+        INNER JOIN produto p ON i.produto_id = p.id
+        WHERE v.user_id = :userId
+          AND (CAST(:dataInicio AS TIMESTAMP) IS NULL OR v.data >= CAST(:dataInicio AS TIMESTAMP))
+        GROUP BY p.id, p.nome, p.imagem_url
+        ORDER BY quantidadeVendida DESC
+        LIMIT :limit
+    """, nativeQuery = true)
+    List<Object[]> findTopProdutosPorPeriodoNative(
+            @Param("userId") Long userId,
+            @Param("dataInicio") LocalDateTime dataInicio,
+            @Param("limit") int limit
+    );
 
-    // =========================================================================
-    // 2. MÉTODOS HÍBRIDOS (CORREÇÃO DE COMPILAÇÃO)
-    // =========================================================================
-
-    // --- FATURAMENTO MÊS ATUAL ---
     @Query(value = "SELECT SUM(preco_venda) FROM venda WHERE user_id = :userId AND EXTRACT(MONTH FROM data) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM data) = EXTRACT(YEAR FROM CURRENT_DATE)", nativeQuery = true)
     Double calcularFaturamentoMesAtual(@Param("userId") Long userId);
+    default Double calcularFaturamentoMesAtual(User user) { return calcularFaturamentoMesAtual(user.getId()); }
 
-    default Double calcularFaturamentoMesAtual(User user) {
-        return calcularFaturamentoMesAtual(user.getId());
-    }
-
-    // --- LUCRO LÍQUIDO MÊS ATUAL ---
     @Query(value = "SELECT SUM(COALESCE(preco_venda,0) + COALESCE(frete_pago_pelo_cliente,0) - COALESCE(tarifa_plataforma,0) - COALESCE(custo_produto_vendido,0) - COALESCE(custo_envio,0) - COALESCE(despesas_operacionais,0)) FROM venda WHERE user_id = :userId AND EXTRACT(MONTH FROM data) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM data) = EXTRACT(YEAR FROM CURRENT_DATE)", nativeQuery = true)
     Double calcularLucroLiquidoMesAtual(@Param("userId") Long userId);
+    default Double calcularLucroLiquidoMesAtual(User user) { return calcularLucroLiquidoMesAtual(user.getId()); }
 
-    default Double calcularLucroLiquidoMesAtual(User user) {
-        return calcularLucroLiquidoMesAtual(user.getId());
-    }
-
-    // --- CONTAGEM VENDAS MÊS ATUAL ---
     @Query(value = "SELECT COUNT(*) FROM venda WHERE user_id = :userId AND EXTRACT(MONTH FROM data) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM data) = EXTRACT(YEAR FROM CURRENT_DATE)", nativeQuery = true)
     Long countVendasMesAtual(@Param("userId") Long userId);
+    default Long countVendasMesAtual(User user) { return countVendasMesAtual(user.getId()); }
 
-    default Long countVendasMesAtual(User user) {
-        return countVendasMesAtual(user.getId());
-    }
-
-    // --- MÉTODOS JPQL (CUSTOS E LUCRO BRUTO) ---
     @Query("SELECT SUM(COALESCE(v.custoProdutoVendido, 0) + COALESCE(v.custoEnvio, 0) + COALESCE(v.tarifaPlataforma, 0)) FROM Venda v WHERE v.user = :user AND EXTRACT(MONTH FROM v.data) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE)")
     Double calcularCustoEfetivoMesAtual(@Param("user") User user);
 
     @Query("SELECT SUM(COALESCE(v.precoVenda, 0) - COALESCE(v.custoProdutoVendido, 0)) FROM Venda v WHERE v.user = :user AND EXTRACT(MONTH FROM v.data) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE)")
     Double calcularLucroBrutoMesAtual(@Param("user") User user);
 
-    // --- CONTAGEM ANO ATUAL ---
     @Query("SELECT COUNT(v) FROM Venda v WHERE v.user = :user AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE)")
     Long countVendasAnoAtual(@Param("user") User user);
 
     @Query("SELECT COUNT(v) FROM Venda v WHERE v.user.id = :userId AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE)")
     Long countVendasAnoAtual(@Param("userId") Long userId);
 
-    // --- CONTAGEM MÊS ANTERIOR ---
     @Query(value = "SELECT COUNT(*) FROM venda WHERE user_id = :userId AND data >= (CURRENT_DATE - INTERVAL '1 month') AND data < CURRENT_DATE", nativeQuery = true)
     Long countVendasMesAnterior(@Param("userId") Long userId);
+    default Long countVendasMesAnterior(User user) { return countVendasMesAnterior(user.getId()); }
 
-    default Long countVendasMesAnterior(User user) {
-        return countVendasMesAnterior(user.getId());
-    }
-
-    // --- ANUAIS EXTRAS ---
     @Query("SELECT SUM(COALESCE(v.precoVenda, 0)) FROM Venda v WHERE v.user = :user AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE)")
     Double calcularFaturamentoAnoAtual(@Param("user") User user);
 
@@ -135,11 +128,6 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
 
     @Query("SELECT SUM(COALESCE(v.precoVenda, 0) - COALESCE(v.custoProdutoVendido, 0)) FROM Venda v WHERE v.user = :user AND EXTRACT(YEAR FROM v.data) = EXTRACT(YEAR FROM CURRENT_DATE)")
     Double calcularLucroBrutoAnoAtual(@Param("user") User user);
-
-
-    // =========================================================================
-    // 3. MÉTODOS PADRÃO (COMPATIBILIDADE)
-    // =========================================================================
 
     Optional<Venda> findByIdAndUser(Long id, User user);
     Optional<Venda> findByIdPedidoAndUser(String idPedido, User user);

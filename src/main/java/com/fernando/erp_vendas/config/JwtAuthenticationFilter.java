@@ -10,12 +10,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-@Component  // ✅ HABILITADO: Agora o Spring vai gerenciar este filtro
+// 🚨 REMOVIDO o @Component para evitar registro duplo do filtro
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
@@ -30,6 +29,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+
+        // ✅ CORREÇÃO: Permitir requisições OPTIONS (Preflight do CORS) passarem direto
+        if (request.getMethod().equalsIgnoreCase("OPTIONS")) {
+            System.out.println("✅ JWT FILTER - Requisição OPTIONS detectada, liberando CORS...");
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         // Pular filtro para endpoints públicos
         String requestURI = request.getRequestURI();

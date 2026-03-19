@@ -93,16 +93,15 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        // ✅ CORREÇÃO: Permite o Preflight do CORS (OPTIONS) em todas as rotas
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                         // Endpoints públicos (sem autenticação)
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/register").permitAll()
                         .requestMatchers("/api/auth/health").permitAll()
                         .requestMatchers("/health").permitAll()
                         .requestMatchers("/").permitAll()
-
-                        // 🚨 BLOQUEADOS PARA PRODUÇÃO - Endpoints temporários
-                        // .requestMatchers("/api/auth/admin-reset-password").authenticated() // OU remover completamente
-                        // .requestMatchers("/api/auth/admin/debug-users").authenticated() // OU remover completamente
 
                         // Todos os outros endpoints exigem autenticação
                         .anyRequest().authenticated()
