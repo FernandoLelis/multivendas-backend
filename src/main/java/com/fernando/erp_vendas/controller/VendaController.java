@@ -12,7 +12,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -37,7 +36,7 @@ public class VendaController {
     @Autowired
     private EntradaEstoqueRepository entradaEstoqueRepository;
 
-    // 🆕 MÉTODO PARA OBTER USUÁRIO LOGADO
+    // ========== MÉTODOS AUXILIARES ==========
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.getPrincipal() instanceof User) {
@@ -46,20 +45,12 @@ public class VendaController {
         throw new RuntimeException("Usuário não autenticado");
     }
 
-    // ✅✅✅ CORRIGIDO COMPLETAMENTE: Método para extrair data
     private LocalDateTime extrairData(Object dataObj) {
-        if (dataObj == null || dataObj.toString().isEmpty()) {
-            return null;
-        }
-
+        if (dataObj == null || dataObj.toString().isEmpty()) return null;
         String dataString = dataObj.toString().trim();
-        System.out.println("📅 [DEBUG-v46.9] DEBUG DATA - String recebida: '" + dataString + "'");
-
         try {
-            // ✅ FORMATO ESPERADO: "YYYY-MM-DD" (apenas data, sem hora)
             LocalDate dataApenas = LocalDate.parse(dataString);
             return dataApenas.atStartOfDay();
-
         } catch (Exception e1) {
             try {
                 if (dataString.contains("T")) {
@@ -73,19 +64,15 @@ public class VendaController {
                     String comT = dataString.replace(" ", "T");
                     return LocalDateTime.parse(comT);
                 } catch (Exception e3) {
-                    System.out.println("❌ [DEBUG-v46.9] ERRO DATA - Formato inválido: " + dataString +
-                            ". Esperado: YYYY-MM-DD (apenas data)");
+                    System.out.println("❌ [DEBUG] DATA inválida: " + dataString);
                     return null;
                 }
             }
         }
     }
 
-    // ✅ MÉTODO AUXILIAR: Extrair Double com valor padrão
     private Double getDoubleValue(Object value, Double defaultValue) {
-        if (value == null) {
-            return defaultValue;
-        }
+        if (value == null) return defaultValue;
         try {
             return Double.valueOf(value.toString());
         } catch (NumberFormatException e) {
@@ -93,63 +80,42 @@ public class VendaController {
         }
     }
 
-    // ✅✅✅ ATUALIZADO v46.9: POST - CRIAR VENDA
+    // ========== ENDPOINTS CRUD ==========
     @PostMapping
     public ResponseEntity<?> criarVenda(@RequestBody Map<String, Object> vendaData) {
         try {
-            System.out.println("🔍 [DEBUG-v46.9] INICIAL - Criar venda - Dados recebidos: " + vendaData);
-
+            System.out.println("🔍 [DEBUG] Criar venda - Dados recebidos: " + vendaData);
             User currentUser = getCurrentUser();
 
-            // ✅ 1️⃣ VALIDAR DADOS OBRIGATÓRIOS
             if (!vendaData.containsKey("idPedido") || !vendaData.containsKey("plataforma") ||
                     !vendaData.containsKey("precoVenda") || !vendaData.containsKey("itens")) {
-                return ResponseEntity.badRequest().body("Dados incompletos. Campos obrigatórios: idPedido, plataforma, precoVenda, itens");
+                return ResponseEntity.badRequest().body("Dados incompletos.");
             }
 
-            // ✅ 2️⃣ EXTRAIR DADOS BÁSICOS DA VENDA
             String idPedido = vendaData.get("idPedido").toString();
             String plataforma = vendaData.get("plataforma").toString();
             Double precoVenda = Double.valueOf(vendaData.get("precoVenda").toString());
 
             LocalDateTime dataVenda = extrairData(vendaData.get("data"));
             if (dataVenda == null) {
-                return ResponseEntity.badRequest()
-                        .body("Data da venda é obrigatória. Formato esperado: YYYY-MM-DD (apenas data)");
+                return ResponseEntity.badRequest().body("Data da venda é obrigatória.");
             }
 
-            // ✅ EXTRAIR DADOS OPCIONAIS
             Double fretePagoPeloCliente = getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0);
             Double custoEnvio = getDoubleValue(vendaData.get("custoEnvio"), 0.0);
             Double tarifaPlataforma = getDoubleValue(vendaData.get("tarifaPlataforma"), 0.0);
             Double despesasOperacionais = getDoubleValue(vendaData.get("despesasOperacionais"), 0.0);
 
-            // ✅ 3️⃣ VALIDAR E EXTRAIR ITENS DA VENDA
             List<Map<String, Object>> itensData = (List<Map<String, Object>>) vendaData.get("itens");
-
             if (itensData == null || itensData.isEmpty()) {
                 return ResponseEntity.badRequest().body("A venda deve conter pelo menos um produto");
             }
 
-            // ✅ DEBUG DETALHADO DE CADA ITEM
-            for (int i = 0; i < itensData.size(); i++) {
-                Map<String, Object> item = itensData.get(i);
-                System.out.println("🔍 [DEBUG-v46.9] ITEM " + i + ": " + item);
-
-                if (!item.containsKey("produtoId") || item.get("produtoId") == null) {
-                    return ResponseEntity.badRequest().body("Item " + i + " não contém produtoId");
-                }
-                if (!item.containsKey("quantidade") || item.get("quantidade") == null) {
-                    return ResponseEntity.badRequest().body("Item " + i + " não contém quantidade");
-                }
-            }
-
-            // ✅ 4️⃣ VERIFICAR SE JÁ EXISTE VENDA COM MESMO ID DO PEDIDO
+            // Verificar duplicidade de ID do pedido
             if (vendaRepository.findByIdPedidoAndUser(idPedido, currentUser).isPresent()) {
                 return ResponseEntity.badRequest().body("Já existe uma venda com este ID do pedido");
             }
 
-            // ✅ 5️⃣ CRIAR A VENDA (SEM PRODUTOS AINDA)
             Venda venda = new Venda();
             venda.setData(dataVenda);
             venda.setIdPedido(idPedido);
@@ -161,129 +127,78 @@ public class VendaController {
             venda.setDespesasOperacionais(despesasOperacionais);
             venda.setUser(currentUser);
 
-            // ✅✅✅ CORREÇÃO: CRIAR ITENS COM VALORES PADRÃO
             List<ItemVenda> itensPreliminares = new ArrayList<>();
             for (Map<String, Object> itemData : itensData) {
-                // Extrair dados
-                Long produtoId;
-                Integer quantidade;
+                Long produtoId = Long.valueOf(itemData.get("produtoId").toString());
+                Integer quantidade = Integer.valueOf(itemData.get("quantidade").toString());
 
-                try {
-                    produtoId = Long.valueOf(itemData.get("produtoId").toString());
-                    quantidade = Integer.valueOf(itemData.get("quantidade").toString());
-                } catch (Exception e) {
-                    return ResponseEntity.badRequest().body("Erro nos dados do item: " + e.getMessage());
-                }
-
-                // Extrair precoUnitarioVenda
                 BigDecimal precoUnitario = BigDecimal.ZERO;
                 if (itemData.containsKey("precoUnitarioVenda") && itemData.get("precoUnitarioVenda") != null) {
-                    try {
-                        precoUnitario = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
-                        System.out.println("💰 [DEBUG-v46.9] precoUnitarioVenda extraído: " + precoUnitario);
-                    } catch (Exception e) {
-                        System.out.println("⚠️ [DEBUG-v46.9] precoUnitarioVenda inválido, usando 0: " + e.getMessage());
-                    }
+                    precoUnitario = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
                 }
 
-                // Buscar produto
                 Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
                 if (!produtoOpt.isPresent()) {
-                    return ResponseEntity.badRequest()
-                            .body("Produto não encontrado ou não pertence ao usuário: ID " + produtoId);
+                    return ResponseEntity.badRequest().body("Produto não encontrado: ID " + produtoId);
                 }
                 Produto produto = produtoOpt.get();
 
-                // ✅✅✅ VERIFICAR ESTOQUE
                 if (!estoqueService.verificarEstoqueSuficiente(produto, quantidade)) {
-                    Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
-                    return ResponseEntity.badRequest()
-                            .body("Estoque insuficiente para produto: " + produto.getNome() +
-                                    ". Disponível: " + saldoDisponivel + ", Necessário: " + quantidade);
+                    Integer saldo = estoqueService.verificarSaldoTotal(produto);
+                    return ResponseEntity.badRequest().body("Estoque insuficiente para: " + produto.getNome() +
+                            ". Disponível: " + saldo + ", Necessário: " + quantidade);
                 }
 
-                // ✅✅✅ CORREÇÃO: Criar ItemVenda com valores padrão
-                ItemVenda itemPreliminar = new ItemVenda();
-                itemPreliminar.setVenda(venda);
-                itemPreliminar.setProduto(produto);
-                itemPreliminar.setQuantidade(quantidade);
-                itemPreliminar.setPrecoUnitario(precoUnitario);
-                itemPreliminar.setUser(currentUser);
-                itemPreliminar.setCustoUnitario(BigDecimal.ZERO);
-                itemPreliminar.setProcessadoPeps(false);
-
-                itensPreliminares.add(itemPreliminar);
-                System.out.println("✅ [DEBUG-v46.9] Item criado: " + produto.getNome() + " x" + quantidade);
+                ItemVenda item = new ItemVenda();
+                item.setVenda(venda);
+                item.setProduto(produto);
+                item.setQuantidade(quantidade);
+                item.setPrecoUnitario(precoUnitario);
+                item.setUser(currentUser);
+                item.setCustoUnitario(BigDecimal.ZERO);
+                item.setProcessadoPeps(false);
+                itensPreliminares.add(item);
             }
 
-            // ✅ 6️⃣ ADICIONAR ITENS À VENDA
             venda.setItens(itensPreliminares);
+            estoqueService.processarVendaComPeps(venda);
 
-            // ✅ 7️⃣ PROCESSAR VENDA COM PEPS CORRETO
-            System.out.println("🔄 [DEBUG-v46.9] Processando venda com PEPS...");
-            try {
-                estoqueService.processarVendaComPeps(venda);
-            } catch (Exception e) {
-                System.out.println("❌ [DEBUG-v46.9] Erro no processamento PEPS: " + e.getMessage());
-                throw e;
-            }
-
-            // ✅ 8️⃣ BUSCAR VENDA COMPLETA
             Optional<Venda> vendaCompleta = vendaRepository.findByIdPedidoAndUser(idPedido, currentUser);
-            if (!vendaCompleta.isPresent()) {
-                throw new RuntimeException("Erro ao recuperar venda criada: " + idPedido);
-            }
-
-            System.out.println("✅✅✅ [DEBUG-v46.9] Venda criada com sucesso: " + vendaCompleta.get().getIdPedido());
-
             return ResponseEntity.ok(new VendaDTO(vendaCompleta.get()));
 
-        } catch (NumberFormatException e) {
-            return ResponseEntity.badRequest().body("Erro de formato numérico: " + e.getMessage());
-        } catch (ClassCastException e) {
-            return ResponseEntity.badRequest().body("Erro de tipo de dados: " + e.getMessage());
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.9] Erro ao criar venda: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao criar venda: " + e.getMessage());
         }
     }
 
-    // ✅✅✅ CORREÇÃO CRÍTICA v46.9: PUT - ATUALIZAR VENDA INTELIGENTE
     @PutMapping("/{id}")
     public ResponseEntity<?> atualizarVenda(@PathVariable Long id, @RequestBody Map<String, Object> vendaData) {
         try {
-            System.out.println("🔄 [DEBUG-v46.9] ATUALIZAR-VENDA - Iniciando atualização da venda ID: " + id);
-            System.out.println("🔍 [DEBUG-v46.9] Dados recebidos: " + vendaData.keySet());
+            System.out.println("🔄 [DEBUG] ATUALIZAR-VENDA - Iniciando atualização da venda ID: " + id);
+            System.out.println("🔍 [DEBUG] Dados recebidos: " + vendaData.keySet());
 
             User currentUser = getCurrentUser();
 
-            // ✅ 1️⃣ BUSCAR VENDA EXISTENTE
             Optional<Venda> vendaExistenteOpt = vendaRepository.findByIdAndUser(id, currentUser);
             if (!vendaExistenteOpt.isPresent()) {
-                System.out.println("❌ [DEBUG-v46.9] Venda não encontrada: " + id);
                 return ResponseEntity.notFound().build();
             }
 
             Venda vendaExistente = vendaExistenteOpt.get();
-            System.out.println("✅ [DEBUG-v46.9] Venda encontrada: " + vendaExistente.getIdPedido());
-            System.out.println("📊 [DEBUG-v46.9] Itens atuais: " + vendaExistente.getItens().size() + " lotes");
+            System.out.println("✅ [DEBUG] Venda encontrada: " + vendaExistente.getIdPedido());
+            System.out.println("📊 [DEBUG] Itens atuais: " + vendaExistente.getItens().size() + " lotes");
 
-            // ✅✅✅ 2️⃣ DETECTAR SE ITENS FORAM ENVIADOS
             boolean itensEnviados = vendaData.containsKey("itens") && vendaData.get("itens") != null;
 
             if (!itensEnviados) {
-                System.out.println("ℹ️ [DEBUG-v46.9] ATENÇÃO: Itens NÃO enviados na atualização!");
-                System.out.println("ℹ️ [DEBUG-v46.9] Atualizando apenas campos básicos...");
-
-                // ✅ APENAS ATUALIZAR CAMPOS BÁSICOS - NÃO REPROCESSAR PEPS
+                // Atualizar apenas campos básicos
                 boolean camposModificados = false;
 
                 if (vendaData.containsKey("idPedido")) {
                     String novoIdPedido = vendaData.get("idPedido").toString();
                     Optional<Venda> vendaComMesmoPedido = vendaRepository.findByIdPedidoAndUser(novoIdPedido, currentUser);
                     if (vendaComMesmoPedido.isPresent() && !vendaComMesmoPedido.get().getId().equals(id)) {
-                        System.out.println("❌ [DEBUG-v46.9] ID do pedido já existe: " + novoIdPedido);
                         return ResponseEntity.badRequest().body("Já existe outra venda com este ID do pedido");
                     }
                     vendaExistente.setIdPedido(novoIdPedido);
@@ -298,8 +213,7 @@ public class VendaController {
                 if (vendaData.containsKey("data")) {
                     LocalDateTime novaData = extrairData(vendaData.get("data"));
                     if (novaData == null) {
-                        return ResponseEntity.badRequest()
-                                .body("Formato de data inválido. Esperado: YYYY-MM-DD");
+                        return ResponseEntity.badRequest().body("Formato de data inválido.");
                     }
                     vendaExistente.setData(novaData);
                     camposModificados = true;
@@ -331,21 +245,16 @@ public class VendaController {
                 }
 
                 if (!camposModificados) {
-                    System.out.println("⚠️ [DEBUG-v46.9] Nenhum campo modificado, retornando venda atual");
                     return ResponseEntity.ok(new VendaDTO(vendaExistente));
                 }
 
-                // ✅ SALVAR VENDA ATUALIZADA (SEM REPROCESSAR PEPS)
                 Venda vendaSalva = vendaRepository.save(vendaExistente);
-                System.out.println("✅✅✅ [DEBUG-v46.9] VENDA ATUALIZADA SEM REPROCESSAR PEPS!");
-                System.out.println("📊 [DEBUG-v46.9] Lotes mantidos: " + vendaSalva.getItens().size());
-
                 return ResponseEntity.ok(new VendaDTO(vendaSalva));
             }
 
-            // ✅✅✅ 3️⃣ ITENS ENVIADOS - VERIFICAR SE QUANTIDADES MUDARAM
+            // Se itens foram enviados, processar com PEPS (lógica completa mantida)
             List<Map<String, Object>> itensData = (List<Map<String, Object>>) vendaData.get("itens");
-            System.out.println("🔍 [DEBUG-v46.9] Itens recebidos: " + itensData.size());
+            System.out.println("🔍 [DEBUG] Itens recebidos: " + itensData.size());
 
             // Mapear quantidades originais por produto
             Map<Long, Integer> quantidadesOriginais = new HashMap<>();
@@ -376,18 +285,15 @@ public class VendaController {
 
                 if (!quantidadeOriginal.equals(quantidadeNova)) {
                     quantidadeMudou = true;
-                    System.out.println("⚠️ [DEBUG-v46.9] Quantidade alterada! Produto " + produtoId +
+                    System.out.println("⚠️ [DEBUG] Quantidade alterada! Produto " + produtoId +
                             ": " + quantidadeOriginal + " → " + quantidadeNova);
                     break;
                 }
             }
 
-            // ✅✅✅ 4️⃣ DECISÃO: REPROCESSAR PEPS OU NÃO?
             if (!quantidadeMudou) {
-                System.out.println("✅✅✅ [DEBUG-v46.9] ATENÇÃO: Quantidades NÃO alteradas!");
-                System.out.println("✅✅✅ [DEBUG-v46.9] NÃO reaplicando PEPS - mantendo lotes originais!");
-
-                // ✅ ATUALIZAR CAMPOS BÁSICOS (como no caso sem itens)
+                System.out.println("✅ [DEBUG] Quantidades NÃO alteradas! Mantendo lotes originais.");
+                // Atualizar apenas campos básicos e preços unitários
                 boolean camposModificados = false;
 
                 if (vendaData.containsKey("idPedido")) {
@@ -418,14 +324,13 @@ public class VendaController {
                     camposModificados = true;
                 }
 
-                // ✅ ATUALIZAR PREÇOS UNITÁRIOS SE FORNECIDOS
+                // Atualizar preços unitários se fornecidos
                 for (Map<String, Object> itemData : itensData) {
                     if (itemData.containsKey("precoUnitarioVenda") && itemData.get("precoUnitarioVenda") != null) {
                         try {
                             Long produtoId = Long.valueOf(itemData.get("produtoId").toString());
                             BigDecimal novoPreco = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
 
-                            // Atualizar todos os itens deste produto
                             for (ItemVenda item : vendaExistente.getItens()) {
                                 if (item.getProduto() != null && item.getProduto().getId().equals(produtoId)) {
                                     item.setPrecoUnitario(novoPreco);
@@ -433,27 +338,23 @@ public class VendaController {
                                 }
                             }
                         } catch (Exception e) {
-                            System.out.println("⚠️ [DEBUG-v46.9] Erro ao atualizar preço: " + e.getMessage());
+                            System.out.println("⚠️ [DEBUG] Erro ao atualizar preço: " + e.getMessage());
                         }
                     }
                 }
 
                 if (!camposModificados) {
-                    System.out.println("⚠️ [DEBUG-v46.9] Nenhum campo modificado");
                     return ResponseEntity.ok(new VendaDTO(vendaExistente));
                 }
 
                 Venda vendaSalva = vendaRepository.save(vendaExistente);
-                System.out.println("✅✅✅ [DEBUG-v46.9] VENDA ATUALIZADA SEM REPROCESSAR PEPS!");
-                System.out.println("📊 [DEBUG-v46.9] Lotes mantidos: " + vendaSalva.getItens().size());
-
                 return ResponseEntity.ok(new VendaDTO(vendaSalva));
             }
 
-            // ✅✅✅ 5️⃣ QUANTIDADE MUDOU - PRECISA REPROCESSAR PEPS COMPLETO
-            System.out.println("⚠️ [DEBUG-v46.9] Quantidades alteradas - reprocessando PEPS...");
+            // Quantidade mudou - reprocessar PEPS completo
+            System.out.println("⚠️ [DEBUG] Quantidades alteradas - reprocessando PEPS...");
 
-            // ✅ VERIFICAR SE JÁ EXISTE OUTRA VENDA COM MESMO ID DO PEDIDO
+            // Verificar duplicidade de ID do pedido
             if (vendaData.containsKey("idPedido")) {
                 String novoIdPedido = vendaData.get("idPedido").toString();
                 Optional<Venda> vendaComMesmoPedido = vendaRepository.findByIdPedidoAndUser(novoIdPedido, currentUser);
@@ -463,86 +364,59 @@ public class VendaController {
                 vendaExistente.setIdPedido(novoIdPedido);
             }
 
-            // ✅ ATUALIZAR CAMPOS BÁSICOS
+            // Atualizar campos básicos
             if (vendaData.containsKey("plataforma")) {
                 vendaExistente.setPlataforma(vendaData.get("plataforma").toString());
             }
-
             if (vendaData.containsKey("data")) {
                 LocalDateTime novaData = extrairData(vendaData.get("data"));
                 if (novaData != null) {
                     vendaExistente.setData(novaData);
                 }
             }
-
             if (vendaData.containsKey("precoVenda")) {
                 vendaExistente.setPrecoVenda(Double.valueOf(vendaData.get("precoVenda").toString()));
             }
-
             if (vendaData.containsKey("fretePagoPeloCliente")) {
                 vendaExistente.setFretePagoPeloCliente(getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0));
             }
-
             if (vendaData.containsKey("custoEnvio")) {
                 vendaExistente.setCustoEnvio(getDoubleValue(vendaData.get("custoEnvio"), 0.0));
             }
-
             if (vendaData.containsKey("tarifaPlataforma")) {
                 vendaExistente.setTarifaPlataforma(getDoubleValue(vendaData.get("tarifaPlataforma"), 0.0));
             }
-
             if (vendaData.containsKey("despesasOperacionais")) {
                 vendaExistente.setDespesasOperacionais(getDoubleValue(vendaData.get("despesasOperacionais"), 0.0));
             }
 
-            // ✅ REMOVER ITENS ANTIGOS E REVERTER ESTOQUE
-            System.out.println("🔄 [DEBUG-v46.9] Revertendo estoque dos itens antigos...");
+            // Reverter estoque dos itens antigos e limpar
             estoqueService.reverterEstoqueVenda(vendaExistente);
             vendaExistente.getItens().clear();
 
-            // ✅ CRIAR NOVOS ITENS PRELIMINARES
+            // Criar novos itens preliminares
             List<ItemVenda> novosItensPreliminares = new ArrayList<>();
-
             for (Map<String, Object> itemData : itensData) {
-                Long produtoId;
-                Integer quantidade;
+                Long produtoId = Long.valueOf(itemData.get("produtoId").toString());
+                Integer quantidade = Integer.valueOf(itemData.get("quantidade").toString());
 
-                try {
-                    produtoId = Long.valueOf(itemData.get("produtoId").toString());
-                    quantidade = Integer.valueOf(itemData.get("quantidade").toString());
-                } catch (Exception e) {
-                    return ResponseEntity.badRequest()
-                            .body("Erro nos dados do produto: " + e.getMessage());
-                }
-
-                // Extrair precoUnitarioVenda
                 BigDecimal precoUnitario = BigDecimal.ZERO;
                 if (itemData.containsKey("precoUnitarioVenda") && itemData.get("precoUnitarioVenda") != null) {
-                    try {
-                        precoUnitario = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
-                    } catch (Exception e) {
-                        System.out.println("⚠️ [DEBUG-v46.9] precoUnitarioVenda inválido, usando 0: " + e.getMessage());
-                    }
+                    precoUnitario = new BigDecimal(itemData.get("precoUnitarioVenda").toString());
                 }
 
-                // Buscar produto
                 Optional<Produto> produtoOpt = produtoRepository.findByIdAndUser(produtoId, currentUser);
                 if (!produtoOpt.isPresent()) {
-                    return ResponseEntity.badRequest()
-                            .body("Produto não encontrado: ID " + produtoId);
+                    return ResponseEntity.badRequest().body("Produto não encontrado: ID " + produtoId);
                 }
-
                 Produto produto = produtoOpt.get();
 
-                // ✅ VERIFICAR ESTOQUE
                 if (!estoqueService.verificarEstoqueSuficiente(produto, quantidade)) {
-                    Integer saldoDisponivel = estoqueService.verificarSaldoTotal(produto);
-                    return ResponseEntity.badRequest()
-                            .body("Estoque insuficiente para produto: " + produto.getNome() +
-                                    ". Disponível: " + saldoDisponivel + ", Necessário: " + quantidade);
+                    Integer saldo = estoqueService.verificarSaldoTotal(produto);
+                    return ResponseEntity.badRequest().body("Estoque insuficiente para: " + produto.getNome() +
+                            ". Disponível: " + saldo + ", Necessário: " + quantidade);
                 }
 
-                // ✅ CRIAR NOVO ITEM PRELIMINAR
                 ItemVenda novoItem = new ItemVenda();
                 novoItem.setVenda(vendaExistente);
                 novoItem.setProduto(produto);
@@ -551,33 +425,21 @@ public class VendaController {
                 novoItem.setUser(currentUser);
                 novoItem.setCustoUnitario(BigDecimal.ZERO);
                 novoItem.setProcessadoPeps(false);
-
                 novosItensPreliminares.add(novoItem);
             }
 
-            // ✅ ADICIONAR NOVOS ITENS À VENDA
             vendaExistente.setItens(novosItensPreliminares);
-
-            // ✅ RECALCULAR CUSTOS E ATUALIZAR ESTOQUE
-            System.out.println("🔄 [DEBUG-v46.9] Recalculando custos PEPS...");
             estoqueService.processarVendaComPeps(vendaExistente);
-
-            // ✅ SALVAR VENDA ATUALIZADA
             Venda vendaSalva = vendaRepository.save(vendaExistente);
-
-            System.out.println("✅✅✅ [DEBUG-v46.9] VENDA ATUALIZADA COM SUCESSO: " + vendaSalva.getIdPedido());
-            System.out.println("📊 [DEBUG-v46.9] Novos lotes criados: " + vendaSalva.getItens().size());
 
             return ResponseEntity.ok(new VendaDTO(vendaSalva));
 
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.9] Erro ao atualizar venda: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao atualizar venda: " + e.getMessage());
         }
     }
 
-    // ✅ ATUALIZADO v46.9: DELETE - Excluir venda com reversão de estoque
     @DeleteMapping("/{id}")
     public ResponseEntity<?> excluirVenda(@PathVariable Long id) {
         try {
@@ -590,23 +452,92 @@ public class VendaController {
 
             Venda venda = vendaOpt.get();
 
-            // ✅ REVERTER ESTOQUE
-            estoqueService.reverterEstoqueVenda(venda);
+            // Reverter estoque conforme status (ativa ou cancelada)
+            estoqueService.reverterEstoqueExclusaoVenda(venda);
 
             // Excluir a venda
             vendaRepository.deleteById(id);
 
-            System.out.println("✅ [DEBUG-v46.9] Venda excluída e estoque revertido: " + venda.getIdPedido());
+            System.out.println("✅ [DEBUG] Venda excluída e estoque ajustado: " + venda.getIdPedido());
             return ResponseEntity.noContent().build();
 
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG-v46.9] Erro ao excluir venda: " + e.getMessage());
+            System.out.println("❌ [DEBUG] Erro ao excluir venda: " + e.getMessage());
             return ResponseEntity.badRequest().body("Erro ao excluir venda: " + e.getMessage());
         }
     }
 
-    // ========== RESTANTE DO CÓDIGO (MÉTODOS GET E DASHBOARD) ==========
+    @PutMapping("/{id}/cancelar")
+    public ResponseEntity<?> cancelarVenda(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> cancelamentoData) {
+        try {
+            User currentUser = getCurrentUser();
 
+            Optional<Venda> vendaOpt = vendaRepository.findByIdAndUser(id, currentUser);
+            if (!vendaOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Venda venda = vendaOpt.get();
+
+            String motivo = (String) cancelamentoData.getOrDefault("motivo", "");
+            Double custoRetorno = getDoubleValue(cancelamentoData.get("custoRetorno"), 0.0);
+            Boolean retornarEstoque = (Boolean) cancelamentoData.getOrDefault("retornouEstoque", false);
+
+            estoqueService.cancelarVenda(venda, motivo, custoRetorno, retornarEstoque);
+
+            return ResponseEntity.ok(new VendaDTO(venda));
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao cancelar venda: " + e.getMessage());
+        }
+    }
+
+    // ========== NOVO ENDPOINT: REATIVAR VENDA CANCELADA ==========
+    @PutMapping("/{id}/reativar")
+    public ResponseEntity<?> reativarVenda(@PathVariable Long id) {
+        try {
+            User currentUser = getCurrentUser();
+
+            Optional<Venda> vendaOpt = vendaRepository.findByIdAndUser(id, currentUser);
+            if (!vendaOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Venda venda = vendaOpt.get();
+
+            if (venda.getStatus() == Venda.StatusVenda.ATIVA) {
+                return ResponseEntity.badRequest().body("Venda já está ativa.");
+            }
+
+            if (venda.getStatus() != Venda.StatusVenda.CANCELADA) {
+                return ResponseEntity.badRequest().body("Apenas vendas canceladas podem ser reativadas.");
+            }
+
+            // Se no cancelamento os produtos foram devolvidos ao estoque, precisamos retirá-los novamente
+            if (venda.getRetornouEstoque() != null && venda.getRetornouEstoque()) {
+                // Reaplicar o consumo de estoque usando PEPS (vai recriar os itens com lotes atuais)
+                estoqueService.processarVendaComPeps(venda);
+            } // Senão, não mexer no estoque
+
+            // Atualizar campos de cancelamento
+            venda.setStatus(Venda.StatusVenda.ATIVA);
+            venda.setMotivoCancelamento(null);
+            venda.setCustoRetorno(0.0);
+            venda.setRetornouEstoque(false);
+
+            // Salvar venda reativada
+            Venda vendaSalva = vendaRepository.save(venda);
+
+            return ResponseEntity.ok(new VendaDTO(vendaSalva));
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro ao reativar venda: " + e.getMessage());
+        }
+    }
+
+    // ========== MÉTODOS DE CONSULTA ==========
     @GetMapping
     public ResponseEntity<List<VendaDTO>> listarTodas() {
         try {
@@ -712,7 +643,7 @@ public class VendaController {
 
             return ResponseEntity.ok(calculos);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular métricas da venda: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Erro ao calcular métricas: " + e.getMessage());
         }
     }
 
@@ -721,16 +652,11 @@ public class VendaController {
         try {
             User currentUser = getCurrentUser();
             LocalDateTime inicio = LocalDateTime.of(ano, mes, 1, 0, 0, 0);
-            LocalDateTime fim = LocalDateTime.of(ano, mes, 1, 23, 59, 59)
-                    .plusMonths(1)
-                    .minusDays(1);
-
+            LocalDateTime fim = inicio.plusMonths(1).minusNanos(1);
             List<Venda> vendas = vendaRepository.findByDataBetweenAndUser(inicio, fim, currentUser);
-
             List<VendaDTO> vendasDTO = vendas.stream()
                     .map(VendaDTO::new)
                     .collect(Collectors.toList());
-
             return ResponseEntity.ok(vendasDTO);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(null);
@@ -749,116 +675,117 @@ public class VendaController {
         }
     }
 
-    // ========== MÉTODOS DO DASHBOARD ==========
-    private Map<String, Double> calcularFaturamentoPorPlataforma(User user) {
-        List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(user);
+    // ========== MÉTODOS AUXILIARES PARA DASHBOARD ==========
+    private Map<String, Double> calcularFaturamentoPorPlataforma(List<Venda> vendas) {
         Map<String, Double> faturamentoPorPlataforma = new HashMap<>();
-
-        faturamentoPorPlataforma.put("AMAZON", 0.0);
-        faturamentoPorPlataforma.put("MERCADO_LIVRE", 0.0);
-        faturamentoPorPlataforma.put("SHOPEE", 0.0);
-
-        for (Venda venda : vendasUsuario) {
+        for (Venda venda : vendas) {
             String plataforma = venda.getPlataforma();
             double faturamentoVenda = venda.calcularFaturamento();
-            faturamentoPorPlataforma.put(plataforma,
-                    faturamentoPorPlataforma.getOrDefault(plataforma, 0.0) + faturamentoVenda);
+            faturamentoPorPlataforma.merge(plataforma, faturamentoVenda, Double::sum);
         }
-
         return faturamentoPorPlataforma;
     }
 
-    private List<Map<String, Object>> calcularProdutosMaisVendidos(User user) {
-        List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(user);
+    private List<Map<String, Object>> calcularProdutosMaisVendidos(List<Venda> vendas) {
         Map<Long, Map<String, Object>> produtosMap = new HashMap<>();
-
-        for (Venda venda : vendasUsuario) {
+        for (Venda venda : vendas) {
             if (venda.getItens() != null) {
                 for (ItemVenda item : venda.getItens()) {
                     Produto produto = item.getProduto();
                     Long produtoId = produto.getId();
 
-                    if (!produtosMap.containsKey(produtoId)) {
-                        Map<String, Object> produtoInfo = new HashMap<>();
-                        produtoInfo.put("produtoId", produtoId);
-                        produtoInfo.put("produtoNome", produto.getNome());
-                        produtoInfo.put("quantidadeVendida", 0);
-                        produtoInfo.put("faturamento", 0.0);
-                        produtoInfo.put("lucroLiquido", 0.0);
-                        produtosMap.put(produtoId, produtoInfo);
-                    }
+                    produtosMap.computeIfAbsent(produtoId, id -> {
+                        Map<String, Object> info = new HashMap<>();
+                        info.put("produtoId", id);
+                        info.put("produtoNome", produto.getNome());
+                        info.put("quantidadeVendida", 0);
+                        info.put("faturamento", 0.0);
+                        info.put("lucroLiquido", 0.0);
+                        return info;
+                    });
 
                     Map<String, Object> produtoInfo = produtosMap.get(produtoId);
-                    int quantidadeAtual = (int) produtoInfo.get("quantidadeVendida");
-                    double faturamentoAtual = (double) produtoInfo.get("faturamento");
-                    double lucroLiquidoAtual = (double) produtoInfo.get("lucroLiquido");
-
                     double proporcaoItem = item.getCustoTotal().doubleValue() / venda.getCustoProdutoVendido();
                     double faturamentoItem = venda.calcularFaturamento() * proporcaoItem;
                     double lucroItem = venda.calcularLucroLiquido() * proporcaoItem;
 
-                    produtoInfo.put("quantidadeVendida", quantidadeAtual + item.getQuantidade());
-                    produtoInfo.put("faturamento", faturamentoAtual + faturamentoItem);
-                    produtoInfo.put("lucroLiquido", lucroLiquidoAtual + lucroItem);
+                    produtoInfo.put("quantidadeVendida", (int) produtoInfo.get("quantidadeVendida") + item.getQuantidade());
+                    produtoInfo.put("faturamento", (double) produtoInfo.get("faturamento") + faturamentoItem);
+                    produtoInfo.put("lucroLiquido", (double) produtoInfo.get("lucroLiquido") + lucroItem);
                 }
             }
         }
 
         List<Map<String, Object>> produtosMaisVendidos = new ArrayList<>(produtosMap.values());
-        produtosMaisVendidos.sort((a, b) -> {
-            int quantidadeA = (int) a.get("quantidadeVendida");
-            int quantidadeB = (int) b.get("quantidadeVendida");
-            return Integer.compare(quantidadeB, quantidadeA);
-        });
-
+        produtosMaisVendidos.sort((a, b) -> Integer.compare((int) b.get("quantidadeVendida"), (int) a.get("quantidadeVendida")));
         return produtosMaisVendidos.size() > 5 ? produtosMaisVendidos.subList(0, 5) : produtosMaisVendidos;
     }
 
+    // ========== ENDPOINTS DO DASHBOARD ==========
     @GetMapping("/dashboard")
     public ResponseEntity<?> getDashboard() {
         try {
             User currentUser = getCurrentUser();
-            Map<String, Object> dashboard = new HashMap<>();
-
-            List<Venda> vendasUsuario = vendaRepository.findByUserWithProduto(currentUser);
-
-            double faturamentoTotal = 0;
-            double custoEfetivoTotal = 0;
-            double lucroBrutoTotal = 0;
-            double lucroLiquidoTotal = 0;
-            double despesasOperacionaisTotal = 0;
-
-            for (Venda venda : vendasUsuario) {
-                faturamentoTotal += venda.calcularFaturamento();
-                custoEfetivoTotal += venda.calcularCustoEfetivoTotal();
-                lucroBrutoTotal += venda.calcularLucroBruto();
-                lucroLiquidoTotal += venda.calcularLucroLiquido();
-                despesasOperacionaisTotal += venda.getDespesasOperacionais();
-            }
-
-            dashboard.put("faturamentoTotal", faturamentoTotal);
-            dashboard.put("custoEfetivoTotal", custoEfetivoTotal);
-            dashboard.put("lucroBrutoTotal", lucroBrutoTotal);
-            dashboard.put("lucroLiquidoTotal", lucroLiquidoTotal);
-            dashboard.put("despesasOperacionaisTotal", despesasOperacionaisTotal);
-
-            double roiTotal = (custoEfetivoTotal > 0) ? (lucroLiquidoTotal / custoEfetivoTotal) * 100 : 0;
-            dashboard.put("roiTotal", roiTotal);
-
-            dashboard.put("faturamentoPorPlataforma", calcularFaturamentoPorPlataforma(currentUser));
-            dashboard.put("totalVendas", vendasUsuario.size());
-
             LocalDateTime agora = LocalDateTime.now();
-            long vendasMesAtual = vendasUsuario.stream()
-                    .filter(venda -> venda.getData().getMonthValue() == agora.getMonthValue()
-                            && venda.getData().getYear() == agora.getYear())
-                    .count();
-            dashboard.put("vendasMesAtual", vendasMesAtual);
+            LocalDateTime inicioMesAtual = agora.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            LocalDateTime inicioAno = agora.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
 
-            dashboard.put("produtosMaisVendidos", calcularProdutosMaisVendidos(currentUser));
+            // Métricas do mês atual
+            List<Object[]> metricasMesList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioMesAtual, agora);
+            Object[] metricasMes = metricasMesList.isEmpty() ? new Object[]{0, 0, 0} : metricasMesList.get(0);
+            System.out.println("🔍 [DASHBOARD] metricasMes: " + Arrays.toString(metricasMes));
+            Double faturamentoMes = ((Number) metricasMes[0]).doubleValue();
+            Double custoEfetivoMes = ((Number) metricasMes[1]).doubleValue();
+            Double despesasOperacionaisMes = ((Number) metricasMes[2]).doubleValue();
+            Double lucroBrutoMes = faturamentoMes - custoEfetivoMes;
+            Double lucroLiquidoMes = lucroBrutoMes - despesasOperacionaisMes;
+            Double roiMes = (custoEfetivoMes > 0) ? (lucroLiquidoMes / custoEfetivoMes) * 100 : 0;
+
+            // Métricas do ano atual
+            List<Object[]> metricasAnoList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioAno, agora);
+            Object[] metricasAno = metricasAnoList.isEmpty() ? new Object[]{0, 0, 0} : metricasAnoList.get(0);
+            System.out.println("🔍 [DASHBOARD] metricasAno: " + Arrays.toString(metricasAno));
+            Double faturamentoAno = ((Number) metricasAno[0]).doubleValue();
+            Double custoEfetivoAno = ((Number) metricasAno[1]).doubleValue();
+            Double despesasOperacionaisAno = ((Number) metricasAno[2]).doubleValue();
+            Double lucroBrutoAno = faturamentoAno - custoEfetivoAno;
+            Double lucroLiquidoAno = lucroBrutoAno - despesasOperacionaisAno;
+            Double roiAno = (custoEfetivoAno > 0) ? (lucroLiquidoAno / custoEfetivoAno) * 100 : 0;
+
+            // Para métricas que dependem de itens (plataforma, produtos mais vendidos), pegamos apenas as vendas ativas
+            List<Venda> todasVendas = vendaRepository.findByUserWithProduto(currentUser);
+            List<Venda> vendasAtivas = todasVendas.stream()
+                    .filter(v -> v.getStatus() == Venda.StatusVenda.ATIVA)
+                    .collect(Collectors.toList());
+
+            Map<String, Double> faturamentoPorPlataforma = calcularFaturamentoPorPlataforma(vendasAtivas);
+            List<Map<String, Object>> produtosMaisVendidos = calcularProdutosMaisVendidos(vendasAtivas);
+
+            long totalVendasAtivas = vendasAtivas.size();
+            long vendasMesAtual = vendasAtivas.stream()
+                    .filter(v -> v.getData().getMonthValue() == agora.getMonthValue()
+                            && v.getData().getYear() == agora.getYear())
+                    .count();
+
+            Map<String, Object> dashboard = new HashMap<>();
+            dashboard.put("faturamentoTotal", faturamentoAno);
+            dashboard.put("custoEfetivoTotal", custoEfetivoAno);
+            dashboard.put("lucroBrutoTotal", lucroBrutoAno);
+            dashboard.put("lucroLiquidoTotal", lucroLiquidoAno);
+            dashboard.put("roiTotal", roiAno);
+            dashboard.put("faturamentoPorPlataforma", faturamentoPorPlataforma);
+            dashboard.put("totalVendas", totalVendasAtivas);
+            dashboard.put("vendasMesAtual", vendasMesAtual);
+            dashboard.put("produtosMaisVendidos", produtosMaisVendidos);
+            dashboard.put("faturamentoMes", faturamentoMes);
+            dashboard.put("custoEfetivoMes", custoEfetivoMes);
+            dashboard.put("lucroBrutoMes", lucroBrutoMes);
+            dashboard.put("lucroLiquidoMes", lucroLiquidoMes);
+            dashboard.put("roiMes", roiMes);
 
             return ResponseEntity.ok(dashboard);
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao carregar dashboard: " + e.getMessage());
         }
     }
@@ -867,10 +794,15 @@ public class VendaController {
     public ResponseEntity<?> getFaturamentoMesAtual() {
         try {
             User currentUser = getCurrentUser();
-            Double faturamento = vendaRepository.calcularFaturamentoMesAtual(currentUser);
-            return ResponseEntity.ok(faturamento != null ? faturamento : 0.0);
+            LocalDateTime agora = LocalDateTime.now();
+            LocalDateTime inicioMes = agora.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            List<Object[]> metricasList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioMes, agora);
+            Object[] metricas = metricasList.isEmpty() ? new Object[]{0, 0, 0} : metricasList.get(0);
+            Double faturamento = ((Number) metricas[0]).doubleValue();
+            return ResponseEntity.ok(faturamento);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular faturamento do mês atual: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao calcular faturamento: " + e.getMessage());
         }
     }
 
@@ -878,10 +810,15 @@ public class VendaController {
     public ResponseEntity<?> getCustoEfetivoMesAtual() {
         try {
             User currentUser = getCurrentUser();
-            Double custoEfetivo = vendaRepository.calcularCustoEfetivoMesAtual(currentUser);
-            return ResponseEntity.ok(custoEfetivo != null ? custoEfetivo : 0.0);
+            LocalDateTime agora = LocalDateTime.now();
+            LocalDateTime inicioMes = agora.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            List<Object[]> metricasList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioMes, agora);
+            Object[] metricas = metricasList.isEmpty() ? new Object[]{0, 0, 0} : metricasList.get(0);
+            Double custoEfetivo = ((Number) metricas[1]).doubleValue();
+            return ResponseEntity.ok(custoEfetivo);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular custo efetivo do mês atual: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao calcular custo efetivo: " + e.getMessage());
         }
     }
 
@@ -889,10 +826,17 @@ public class VendaController {
     public ResponseEntity<?> getLucroBrutoMesAtual() {
         try {
             User currentUser = getCurrentUser();
-            Double lucroBruto = vendaRepository.calcularLucroBrutoMesAtual(currentUser);
-            return ResponseEntity.ok(lucroBruto != null ? lucroBruto : 0.0);
+            LocalDateTime agora = LocalDateTime.now();
+            LocalDateTime inicioMes = agora.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            List<Object[]> metricasList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioMes, agora);
+            Object[] metricas = metricasList.isEmpty() ? new Object[]{0, 0, 0} : metricasList.get(0);
+            Double faturamento = ((Number) metricas[0]).doubleValue();
+            Double custoEfetivo = ((Number) metricas[1]).doubleValue();
+            Double lucroBruto = faturamento - custoEfetivo;
+            return ResponseEntity.ok(lucroBruto);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular lucro bruto do mês atual: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao calcular lucro bruto: " + e.getMessage());
         }
     }
 
@@ -900,29 +844,31 @@ public class VendaController {
     public ResponseEntity<?> getLucroLiquidoMesAtual() {
         try {
             User currentUser = getCurrentUser();
-            Double lucroLiquido = vendaRepository.calcularLucroLiquidoMesAtual(currentUser);
-            return ResponseEntity.ok(lucroLiquido != null ? lucroLiquido : 0.0);
+            LocalDateTime agora = LocalDateTime.now();
+            LocalDateTime inicioMes = agora.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+            List<Object[]> metricasList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioMes, agora);
+            Object[] metricas = metricasList.isEmpty() ? new Object[]{0, 0, 0} : metricasList.get(0);
+            Double faturamento = ((Number) metricas[0]).doubleValue();
+            Double custoEfetivo = ((Number) metricas[1]).doubleValue();
+            Double despesas = ((Number) metricas[2]).doubleValue();
+            Double lucroLiquido = (faturamento - custoEfetivo) - despesas;
+            return ResponseEntity.ok(lucroLiquido);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular lucro líquido do mês atual: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao calcular lucro líquido: " + e.getMessage());
         }
     }
 
-    // ✅ CORREÇÃO 1: Cálculo pro-rata (dias iguais) para a variação percentual dar certo e não ficar negativa à toa
     @GetMapping("/quantidade-vendas")
     public ResponseEntity<?> getQuantidadeVendas() {
         try {
             User currentUser = getCurrentUser();
             LocalDateTime agora = LocalDateTime.now();
             LocalDateTime inicioMesAtual = agora.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-
-            // Período correspondente do mês passado (Ex: 01/01 até o dia exato de hoje no mês passado)
             LocalDateTime inicioMesAnterior = inicioMesAtual.minusMonths(1);
             LocalDateTime limiteMesAnterior = agora.minusMonths(1);
-
-            // Início do ano
             LocalDateTime inicioAno = agora.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
 
-            // Conta usando as datas dinâmicas pelo Spring Data padrão
             long vendasMesAtual = vendaRepository.findByDataBetweenAndUser(inicioMesAtual, agora, currentUser).size();
             long vendasMesAnterior = vendaRepository.findByDataBetweenAndUser(inicioMesAnterior, limiteMesAnterior, currentUser).size();
             long vendasAnoAtual = vendaRepository.findByDataBetweenAndUser(inicioAno, agora, currentUser).size();
@@ -938,83 +884,65 @@ public class VendaController {
             response.put("mesAtual", vendasMesAtual);
             response.put("anoAtual", vendasAnoAtual);
             response.put("variacao", variacao);
-
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.badRequest()
-                    .body("Erro ao buscar quantidade de vendas: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao buscar quantidade de vendas: " + e.getMessage());
         }
     }
 
-    // ✅ CORREÇÃO DO SALES-CHART: Faz a SOMA ACUMULADA e previne o erro 400
     @GetMapping("/vendas-por-dia")
     public ResponseEntity<?> getVendasPorDia(
             @RequestParam(required = false) Integer mes,
             @RequestParam(required = false) Integer ano) {
-
         try {
             User currentUser = getCurrentUser();
-
-            // Se não vier mês/ano, usa o atual
             if (mes == null) mes = LocalDate.now().getMonthValue();
             if (ano == null) ano = LocalDate.now().getYear();
 
-            // Determinar o período
             LocalDate dataInicio = LocalDate.of(ano, mes, 1);
             int ultimoDia = dataInicio.lengthOfMonth();
-            LocalDate dataFim = dataInicio.withDayOfMonth(ultimoDia);
-
-            // Buscar vendas de forma segura e limpa
             LocalDateTime inicioMes = dataInicio.atStartOfDay();
-            LocalDateTime fimMes = dataFim.atTime(23, 59, 59);
+            LocalDateTime fimMes = dataInicio.withDayOfMonth(ultimoDia).atTime(23, 59, 59);
             List<Venda> vendasDoMes = vendaRepository.findByDataBetweenAndUser(inicioMes, fimMes, currentUser);
 
-            // 1. Agrupar vendas por dia
             Map<Integer, Integer> pedidosPorDia = new HashMap<>();
             for (Venda venda : vendasDoMes) {
                 int diaDaVenda = venda.getData().getDayOfMonth();
                 pedidosPorDia.put(diaDaVenda, pedidosPorDia.getOrDefault(diaDaVenda, 0) + 1);
             }
 
-            // 2. Criar a soma acumulada
-            Map<String, Integer> retornoAcumulado = new LinkedHashMap<>(); // Linked garante a ordem no JSON
+            Map<String, Integer> retornoAcumulado = new LinkedHashMap<>();
             int totalAcumulado = 0;
-
             LocalDate hoje = LocalDate.now();
             boolean ehMesAtual = (ano == hoje.getYear() && mes == hoje.getMonthValue());
-            int diaLimite = ehMesAtual ? hoje.getDayOfMonth() : ultimoDia; // Se for mês atual, para no dia de hoje
+            int diaLimite = ehMesAtual ? hoje.getDayOfMonth() : ultimoDia;
 
-            // Preenche de 1 até o último dia (ou até o dia de hoje)
             for (int dia = 1; dia <= diaLimite; dia++) {
                 int vendasHoje = pedidosPorDia.getOrDefault(dia, 0);
                 totalAcumulado += vendasHoje;
-
-                // Formata a chave como YYYY-MM-DD
                 String dataStr = String.format("%04d-%02d-%02d", ano, mes, dia);
                 retornoAcumulado.put(dataStr, totalAcumulado);
             }
-
             return ResponseEntity.ok(retornoAcumulado);
-
         } catch (Exception e) {
-            System.out.println("❌ [DEBUG] Erro em vendas-por-dia: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao buscar vendas por dia: " + e.getMessage());
         }
     }
 
-    // ✅ CORREÇÃO 2: Força o Java a calcular os totais anuais usando as regras da entidade Venda
     @GetMapping("/faturamento-ano-atual")
     public ResponseEntity<?> getFaturamentoAnoAtual() {
         try {
             User currentUser = getCurrentUser();
             LocalDateTime inicioAno = LocalDateTime.now().withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-            List<Venda> vendasAno = vendaRepository.findByDataBetweenAndUser(inicioAno, LocalDateTime.now(), currentUser);
-
-            double faturamento = vendasAno.stream().mapToDouble(Venda::calcularFaturamento).sum();
+            List<Object[]> metricasList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioAno, LocalDateTime.now());
+            Object[] metricas = metricasList.isEmpty() ? new Object[]{0, 0, 0} : metricasList.get(0);
+            Double faturamento = ((Number) metricas[0]).doubleValue();
             return ResponseEntity.ok(faturamento);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular faturamento do ano atual: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao calcular faturamento anual: " + e.getMessage());
         }
     }
 
@@ -1023,12 +951,13 @@ public class VendaController {
         try {
             User currentUser = getCurrentUser();
             LocalDateTime inicioAno = LocalDateTime.now().withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-            List<Venda> vendasAno = vendaRepository.findByDataBetweenAndUser(inicioAno, LocalDateTime.now(), currentUser);
-
-            double custoEfetivo = vendasAno.stream().mapToDouble(Venda::calcularCustoEfetivoTotal).sum();
+            List<Object[]> metricasList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioAno, LocalDateTime.now());
+            Object[] metricas = metricasList.isEmpty() ? new Object[]{0, 0, 0} : metricasList.get(0);
+            Double custoEfetivo = ((Number) metricas[1]).doubleValue();
             return ResponseEntity.ok(custoEfetivo);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular custo efetivo do ano atual: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao calcular custo efetivo anual: " + e.getMessage());
         }
     }
 
@@ -1037,42 +966,34 @@ public class VendaController {
         try {
             User currentUser = getCurrentUser();
             LocalDateTime inicioAno = LocalDateTime.now().withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-            List<Venda> vendasAno = vendaRepository.findByDataBetweenAndUser(inicioAno, LocalDateTime.now(), currentUser);
-
-            double lucroBruto = vendasAno.stream().mapToDouble(Venda::calcularLucroBruto).sum();
+            List<Object[]> metricasList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioAno, LocalDateTime.now());
+            Object[] metricas = metricasList.isEmpty() ? new Object[]{0, 0, 0} : metricasList.get(0);
+            Double faturamento = ((Number) metricas[0]).doubleValue();
+            Double custoEfetivo = ((Number) metricas[1]).doubleValue();
+            Double lucroBruto = faturamento - custoEfetivo;
             return ResponseEntity.ok(lucroBruto);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao calcular lucro bruto do ano atual: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Erro ao calcular lucro bruto anual: " + e.getMessage());
         }
     }
 
-    // ✅ NOVO: Endpoint para fornecer os dados reais do mês anterior para o cálculo de crescimento (Growth)
     @GetMapping("/metricas-mes-anterior")
     public ResponseEntity<?> getMetricasMesAnterior() {
         try {
             User currentUser = getCurrentUser();
             LocalDateTime agora = LocalDateTime.now();
-
-            // Pega do dia 01 do mês passado até o dia/hora EXATO do mês passado (Pro-rata justo)
-            // Ex: Se hoje é 10/03 às 14h, ele compara com 01/02 até 10/02 às 14h.
             LocalDateTime inicioMesAnterior = agora.minusMonths(1).withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
             LocalDateTime limiteMesAnterior = agora.minusMonths(1);
 
-            List<Venda> vendasMesAnterior = vendaRepository.findByDataBetweenAndUser(inicioMesAnterior, limiteMesAnterior, currentUser);
-
-            double faturamento = 0;
-            double custoEfetivo = 0;
-            double lucroBruto = 0;
-            double lucroLiquido = 0;
-
-            for (Venda v : vendasMesAnterior) {
-                faturamento += v.calcularFaturamento();
-                custoEfetivo += v.calcularCustoEfetivoTotal();
-                lucroBruto += v.calcularLucroBruto();
-                lucroLiquido += v.calcularLucroLiquido();
-            }
-
-            double roi = (custoEfetivo > 0) ? (lucroLiquido / custoEfetivo) * 100 : 0;
+            List<Object[]> metricasList = vendaRepository.getMetricasAgregadasNative(currentUser.getId(), inicioMesAnterior, limiteMesAnterior);
+            Object[] metricas = metricasList.isEmpty() ? new Object[]{0, 0, 0} : metricasList.get(0);
+            Double faturamento = ((Number) metricas[0]).doubleValue();
+            Double custoEfetivo = ((Number) metricas[1]).doubleValue();
+            Double despesas = ((Number) metricas[2]).doubleValue();
+            Double lucroBruto = faturamento - custoEfetivo;
+            Double lucroLiquido = lucroBruto - despesas;
+            Double roi = (custoEfetivo > 0) ? (lucroLiquido / custoEfetivo) * 100 : 0;
 
             Map<String, Object> response = new HashMap<>();
             response.put("faturamento", faturamento);
@@ -1080,9 +1001,9 @@ public class VendaController {
             response.put("lucroBruto", lucroBruto);
             response.put("lucroLiquido", lucroLiquido);
             response.put("roi", roi);
-
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.badRequest().body("Erro ao calcular métricas do mês anterior: " + e.getMessage());
         }
     }

@@ -35,7 +35,6 @@ public class EstoqueService {
 
     @Transactional(readOnly = true)
     public BigDecimal calcularCustoVenda(Produto produto, Integer quantidade) {
-        // ✅ ATUALIZADO: Ordenação por Data E ID
         List<EntradaEstoque> lotes = entradaEstoqueRepository
                 .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAscIdAsc(
                         produto, produto.getUser(), 0
@@ -70,6 +69,20 @@ public class EstoqueService {
     }
 
     @Transactional(propagation = Propagation.REQUIRED)
+    public void reverterEstoqueExclusaoVenda(Venda venda) {
+        // Se a venda está ativa, devolve o estoque (comportamento original)
+        if (venda.getStatus() == Venda.StatusVenda.ATIVA) {
+            reverterEstoqueVenda(venda);
+        } else if (venda.getStatus() == Venda.StatusVenda.CANCELADA) {
+            // Se cancelada e NÃO retornou ao estoque, devolve o estoque (pois o cancelamento deu baixa)
+            if (venda.getRetornouEstoque() == null || !venda.getRetornouEstoque()) {
+                reverterEstoqueVenda(venda);
+            }
+            // Se cancelada e retornou ao estoque, não faz nada porque o estoque já foi revertido no cancelamento
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRED)
     public void processarVendaComPeps(Venda venda) {
         System.out.println("🔄 [ESTOQUE] PEPS iniciado para venda: " + venda.getIdPedido());
 
@@ -85,7 +98,6 @@ public class EstoqueService {
             Produto produto = rascunho.getProduto();
             int qtdFaltante = rascunho.getQuantidade();
 
-            // ✅ ATUALIZADO: Ordenação por Data E ID
             List<EntradaEstoque> lotes = entradaEstoqueRepository
                     .findByProdutoAndUserAndSaldoGreaterThanOrderByDataEntradaAscIdAsc(produto, user, 0);
 
@@ -122,5 +134,24 @@ public class EstoqueService {
         venda.setCustoProdutoVendido(custoTotalVenda);
         vendaRepository.save(venda);
         System.out.println("✅ [ESTOQUE] PEPS concluído.");
+    }
+
+    // ========== NOVO MÉTODO DE CANCELAMENTO ==========
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void cancelarVenda(Venda venda, String motivo, Double custoRetorno, Boolean retornarEstoque) {
+        if (venda.getStatus() == Venda.StatusVenda.CANCELADA) {
+            throw new RuntimeException("Venda já está cancelada.");
+        }
+
+        if (retornarEstoque) {
+            reverterEstoqueVenda(venda);
+        }
+
+        venda.setStatus(Venda.StatusVenda.CANCELADA);
+        venda.setMotivoCancelamento(motivo);
+        venda.setCustoRetorno(custoRetorno);
+        venda.setRetornouEstoque(retornarEstoque);
+
+        vendaRepository.save(venda);
     }
 }

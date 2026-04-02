@@ -147,4 +147,17 @@ public interface VendaRepository extends JpaRepository<Venda, Long> {
 
     @Query("SELECT CAST(v.data AS date), SUM(COALESCE(v.precoVenda, 0)) FROM Venda v WHERE v.user = :user AND EXTRACT(MONTH FROM v.data) = :mes AND EXTRACT(YEAR FROM v.data) = :ano GROUP BY CAST(v.data AS date) ORDER BY CAST(v.data AS date) ASC")
     List<Object[]> findVendasPorDiaDoMes(@Param("user") User user, @Param("mes") Integer mes, @Param("ano") Integer ano);
+
+    // ================== MÉTODO NATIVO PARA MÉTRICAS AGREGADAS ==================
+    @Query(value = "SELECT " +
+            "COALESCE(SUM(CASE WHEN status = 'ATIVA' THEN preco_venda + frete_pago_pelo_cliente ELSE 0 END), 0) as faturamento, " +
+            "COALESCE(SUM(CASE WHEN status = 'ATIVA' THEN custo_produto_vendido + custo_envio + tarifa_plataforma " +
+            "WHEN status = 'CANCELADA' AND retornou_estoque = true THEN custo_envio + custo_retorno " +
+            "WHEN status = 'CANCELADA' AND retornou_estoque = false THEN custo_produto_vendido + custo_envio + custo_retorno " +
+            "ELSE 0 END), 0) as custo_efetivo, " +
+            "COALESCE(SUM(despesas_operacionais), 0) as despesas_operacionais " +
+            "FROM venda v WHERE v.user_id = :userId AND v.data >= :inicio AND v.data < :fim", nativeQuery = true)
+    List<Object[]> getMetricasAgregadasNative(@Param("userId") Long userId,
+                                              @Param("inicio") LocalDateTime inicio,
+                                              @Param("fim") LocalDateTime fim);
 }

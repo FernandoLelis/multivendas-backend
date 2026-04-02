@@ -27,6 +27,12 @@ public class VendaDTO {
     private Double lucroLiquido;
     private Double roi;
 
+    // ✅ CAMPOS DE CANCELAMENTO
+    private String status; // "ATIVA" ou "CANCELADA"
+    private String motivoCancelamento;
+    private Double custoRetorno;
+    private Boolean retornouEstoque;
+
     private List<ItemVendaDTO> itens;
 
     // ✅ CONSTRUTOR PADRÃO
@@ -47,6 +53,12 @@ public class VendaDTO {
         this.despesasOperacionais = venda.getDespesasOperacionais();
         this.custoProdutoVendido = venda.getCustoProdutoVendido();
 
+        // ✅ NOVOS CAMPOS DE CANCELAMENTO
+        this.status = venda.getStatus() != null ? venda.getStatus().name() : "ATIVA";
+        this.motivoCancelamento = venda.getMotivoCancelamento();
+        this.custoRetorno = venda.getCustoRetorno();
+        this.retornouEstoque = venda.getRetornouEstoque();
+
         // ✅✅✅ CORREÇÃO CRÍTICA v46.8.2: FILTRAR APENAS ITENS COM PRODUTO
         if (venda.getItens() != null) {
             this.itens = venda.getItens().stream()
@@ -60,14 +72,13 @@ public class VendaDTO {
                             dto.setProdutoId(item.getProduto().getId());
                             dto.setProdutoNome(item.getProduto().getNome());
                             dto.setProdutoSku(item.getProduto().getSku());
-                            // ✅ O SEGREDO REVELADO: Puxando a imagem do banco para o Angular!
                             dto.setImagemUrl(item.getProduto().getImagemUrl());
                         } else {
                             // Fallback seguro
                             dto.setProdutoId(0L);
                             dto.setProdutoNome("Produto não encontrado");
                             dto.setProdutoSku("N/A");
-                            dto.setImagemUrl(null); // ✅ Garantir que fique vazio se não houver produto
+                            dto.setImagemUrl(null);
                         }
 
                         dto.setQuantidade(item.getQuantidade());
@@ -96,133 +107,66 @@ public class VendaDTO {
 
     // ========== GETTERS E SETTERS ==========
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public LocalDateTime getData() { return data; }
+    public void setData(LocalDateTime data) { this.data = data; }
 
-    public LocalDateTime getData() {
-        return data;
-    }
+    public String getIdPedido() { return idPedido; }
+    public void setIdPedido(String idPedido) { this.idPedido = idPedido; }
 
-    public void setData(LocalDateTime data) {
-        this.data = data;
-    }
+    public String getPlataforma() { return plataforma; }
+    public void setPlataforma(String plataforma) { this.plataforma = plataforma; }
 
-    public String getIdPedido() {
-        return idPedido;
-    }
+    public Double getPrecoVenda() { return precoVenda != null ? precoVenda : 0.0; }
+    public void setPrecoVenda(Double precoVenda) { this.precoVenda = precoVenda; }
 
-    public void setIdPedido(String idPedido) {
-        this.idPedido = idPedido;
-    }
+    public Double getFretePagoPeloCliente() { return fretePagoPeloCliente != null ? fretePagoPeloCliente : 0.0; }
+    public void setFretePagoPeloCliente(Double fretePagoPeloCliente) { this.fretePagoPeloCliente = fretePagoPeloCliente; }
 
-    public String getPlataforma() {
-        return plataforma;
-    }
+    public Double getCustoEnvio() { return custoEnvio != null ? custoEnvio : 0.0; }
+    public void setCustoEnvio(Double custoEnvio) { this.custoEnvio = custoEnvio; }
 
-    public void setPlataforma(String plataforma) {
-        this.plataforma = plataforma;
-    }
+    public Double getTarifaPlataforma() { return tarifaPlataforma != null ? tarifaPlataforma : 0.0; }
+    public void setTarifaPlataforma(Double tarifaPlataforma) { this.tarifaPlataforma = tarifaPlataforma; }
 
-    public Double getPrecoVenda() {
-        return precoVenda != null ? precoVenda : 0.0;
-    }
+    public Double getDespesasOperacionais() { return despesasOperacionais != null ? despesasOperacionais : 0.0; }
+    public void setDespesasOperacionais(Double despesasOperacionais) { this.despesasOperacionais = despesasOperacionais; }
 
-    public void setPrecoVenda(Double precoVenda) {
-        this.precoVenda = precoVenda;
-    }
+    public Double getCustoProdutoVendido() { return custoProdutoVendido != null ? custoProdutoVendido : 0.0; }
+    public void setCustoProdutoVendido(Double custoProdutoVendido) { this.custoProdutoVendido = custoProdutoVendido; }
 
-    public Double getFretePagoPeloCliente() {
-        return fretePagoPeloCliente != null ? fretePagoPeloCliente : 0.0;
-    }
+    // ✅ GETTERS E SETTERS DOS NOVOS CAMPOS
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-    public void setFretePagoPeloCliente(Double fretePagoPeloCliente) {
-        this.fretePagoPeloCliente = fretePagoPeloCliente;
-    }
+    public String getMotivoCancelamento() { return motivoCancelamento; }
+    public void setMotivoCancelamento(String motivoCancelamento) { this.motivoCancelamento = motivoCancelamento; }
 
-    public Double getCustoEnvio() {
-        return custoEnvio != null ? custoEnvio : 0.0;
-    }
+    public Double getCustoRetorno() { return custoRetorno; }
+    public void setCustoRetorno(Double custoRetorno) { this.custoRetorno = custoRetorno; }
 
-    public void setCustoEnvio(Double custoEnvio) {
-        this.custoEnvio = custoEnvio;
-    }
+    public Boolean getRetornouEstoque() { return retornouEstoque; }
+    public void setRetornouEstoque(Boolean retornouEstoque) { this.retornouEstoque = retornouEstoque; }
 
-    public Double getTarifaPlataforma() {
-        return tarifaPlataforma != null ? tarifaPlataforma : 0.0;
-    }
+    public List<ItemVendaDTO> getItens() { return itens != null ? itens : new ArrayList<>(); }
+    public void setItens(List<ItemVendaDTO> itens) { this.itens = itens; }
 
-    public void setTarifaPlataforma(Double tarifaPlataforma) {
-        this.tarifaPlataforma = tarifaPlataforma;
-    }
+    public Double getFaturamento() { return faturamento != null ? faturamento : 0.0; }
+    public void setFaturamento(Double faturamento) { this.faturamento = faturamento; }
 
-    public Double getDespesasOperacionais() {
-        return despesasOperacionais != null ? despesasOperacionais : 0.0;
-    }
+    public Double getCustoEfetivoTotal() { return custoEfetivoTotal != null ? custoEfetivoTotal : 0.0; }
+    public void setCustoEfetivoTotal(Double custoEfetivoTotal) { this.custoEfetivoTotal = custoEfetivoTotal; }
 
-    public void setDespesasOperacionais(Double despesasOperacionais) {
-        this.despesasOperacionais = despesasOperacionais;
-    }
+    public Double getLucroBruto() { return lucroBruto != null ? lucroBruto : 0.0; }
+    public void setLucroBruto(Double lucroBruto) { this.lucroBruto = lucroBruto; }
 
-    public Double getCustoProdutoVendido() {
-        return custoProdutoVendido != null ? custoProdutoVendido : 0.0;
-    }
+    public Double getLucroLiquido() { return lucroLiquido != null ? lucroLiquido : 0.0; }
+    public void setLucroLiquido(Double lucroLiquido) { this.lucroLiquido = lucroLiquido; }
 
-    public void setCustoProdutoVendido(Double custoProdutoVendido) {
-        this.custoProdutoVendido = custoProdutoVendido;
-    }
-
-    public List<ItemVendaDTO> getItens() {
-        return itens != null ? itens : new ArrayList<>();
-    }
-
-    public void setItens(List<ItemVendaDTO> itens) {
-        this.itens = itens;
-    }
-
-    public Double getFaturamento() {
-        return faturamento != null ? faturamento : 0.0;
-    }
-
-    public void setFaturamento(Double faturamento) {
-        this.faturamento = faturamento;
-    }
-
-    public Double getCustoEfetivoTotal() {
-        return custoEfetivoTotal != null ? custoEfetivoTotal : 0.0;
-    }
-
-    public void setCustoEfetivoTotal(Double custoEfetivoTotal) {
-        this.custoEfetivoTotal = custoEfetivoTotal;
-    }
-
-    public Double getLucroBruto() {
-        return lucroBruto != null ? lucroBruto : 0.0;
-    }
-
-    public void setLucroBruto(Double lucroBruto) {
-        this.lucroBruto = lucroBruto;
-    }
-
-    public Double getLucroLiquido() {
-        return lucroLiquido != null ? lucroLiquido : 0.0;
-    }
-
-    public void setLucroLiquido(Double lucroLiquido) {
-        this.lucroLiquido = lucroLiquido;
-    }
-
-    public Double getRoi() {
-        return roi != null ? roi : 0.0;
-    }
-
-    public void setRoi(Double roi) {
-        this.roi = roi;
-    }
+    public Double getRoi() { return roi != null ? roi : 0.0; }
+    public void setRoi(Double roi) { this.roi = roi; }
 
     // ✅ MÉTODO PARA VERIFICAR SE TEM ITENS VÁLIDOS
     public boolean temItensValidos() {
@@ -259,6 +203,7 @@ public class VendaDTO {
                 "id=" + id +
                 ", idPedido='" + idPedido + '\'' +
                 ", plataforma='" + plataforma + '\'' +
+                ", status='" + status + '\'' +
                 ", precoVenda=" + precoVenda +
                 ", itens=" + (itens != null ? itens.size() : 0) +
                 ", faturamento=" + faturamento +

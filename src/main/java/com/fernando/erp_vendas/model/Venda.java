@@ -12,6 +12,11 @@ import java.util.stream.Collectors;
 @Table(name = "venda")
 public class Venda {
 
+    public enum StatusVenda {
+        ATIVA,
+        CANCELADA
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -43,13 +48,25 @@ public class Venda {
     @Column(name = "despesas_operacionais")
     private Double despesasOperacionais = 0.0;
 
+    // --- Campos de Cancelamento ---
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private StatusVenda status = StatusVenda.ATIVA;
+
+    @Column(name = "motivo_cancelamento", length = 500)
+    private String motivoCancelamento;
+
+    @Column(name = "custo_retorno")
+    private Double custoRetorno = 0.0;
+
+    @Column(name = "retornou_estoque")
+    private Boolean retornouEstoque = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @JsonIgnore
     private User user;
 
-    // ✅ CORREÇÃO CRÍTICA v46.9.4: orphanRemoval = true
-    // Garante que itens removidos da lista sejam DELETADOS fisicamente do banco.
     @OneToMany(mappedBy = "venda", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     @JsonIgnore
     private List<ItemVenda> itens = new ArrayList<>();
@@ -103,22 +120,29 @@ public class Venda {
     public Double getDespesasOperacionais() { return despesasOperacionais != null ? despesasOperacionais : 0.0; }
     public void setDespesasOperacionais(Double despesasOperacionais) { this.despesasOperacionais = despesasOperacionais != null ? despesasOperacionais : 0.0; }
 
+    public StatusVenda getStatus() { return status; }
+    public void setStatus(StatusVenda status) { this.status = status; }
+
+    public String getMotivoCancelamento() { return motivoCancelamento; }
+    public void setMotivoCancelamento(String motivoCancelamento) { this.motivoCancelamento = motivoCancelamento; }
+
+    public Double getCustoRetorno() { return custoRetorno != null ? custoRetorno : 0.0; }
+    public void setCustoRetorno(Double custoRetorno) { this.custoRetorno = custoRetorno != null ? custoRetorno : 0.0; }
+
+    public Boolean getRetornouEstoque() { return retornouEstoque != null ? retornouEstoque : false; }
+    public void setRetornouEstoque(Boolean retornouEstoque) { this.retornouEstoque = retornouEstoque; }
+
     public User getUser() { return user; }
     public void setUser(User user) { this.user = user; }
 
     public List<ItemVenda> getItens() { return itens; }
 
-    // ✅ ATUALIZADO: Setter inteligente para orphanRemoval e integridade referencial
     public void setItens(List<ItemVenda> novosItens) {
         if (this.itens == null) {
             this.itens = new ArrayList<>();
         }
-
-        // Limpar a lista dispara o orphanRemoval (DELETE) para os itens antigos
         this.itens.clear();
-
         if (novosItens != null) {
-            // Garante que cada item saiba a qual venda pertence antes de ser adicionado
             novosItens.forEach(item -> item.setVenda(this));
             this.itens.addAll(novosItens);
         }
@@ -133,37 +157,45 @@ public class Venda {
     }
 
     // --- Métodos Auxiliares e de Cálculo ---
-
     public Integer getQuantidadeTotal() {
-        if (itens == null || itens.isEmpty()) {
-            return 0;
-        }
-        return itens.stream()
-                .filter(i -> i.getQuantidade() != null)
-                .mapToInt(ItemVenda::getQuantidade)
-                .sum();
+        if (itens == null || itens.isEmpty()) return 0;
+        return itens.stream().filter(i -> i.getQuantidade() != null).mapToInt(ItemVenda::getQuantidade).sum();
     }
 
     public Double getCustoProdutosTotal() {
-        if (itens == null || itens.isEmpty()) {
-            return 0.0;
-        }
-        return itens.stream()
-                .filter(i -> i.getCustoTotal() != null)
-                .mapToDouble(item -> item.getCustoTotal().doubleValue())
-                .sum();
+        if (itens == null || itens.isEmpty()) return 0.0;
+        return itens.stream().filter(i -> i.getCustoTotal() != null).mapToDouble(item -> item.getCustoTotal().doubleValue()).sum();
     }
 
+    // Faturamento bruto para exibição (mesmo se cancelada)
     public Double calcularFaturamento() {
         return getPrecoVenda() + getFretePagoPeloCliente();
     }
 
+    // Faturamento efetivo para cálculo de lucro (zero se cancelada)
+    public Double calcularFaturamentoEfetivo() {
+        if (status == StatusVenda.CANCELADA) {
+            return 0.0;
+        }
+        return calcularFaturamento();
+    }
+
     public Double calcularCustoEfetivoTotal() {
+        if (status == StatusVenda.CANCELADA) {
+            if (Boolean.TRUE.equals(retornouEstoque)) {
+                // Produtos voltaram ao estoque: custo = envio + retorno
+                return getCustoEnvio() + getCustoRetorno();
+            } else {
+                // Produtos não voltaram: custo = produto + envio + retorno
+                return getCustoProdutoVendido() + getCustoEnvio() + getCustoRetorno();
+            }
+        }
+        // Venda ativa: custo = produto + envio + tarifa
         return getCustoProdutoVendido() + getCustoEnvio() + getTarifaPlataforma();
     }
 
     public Double calcularLucroBruto() {
-        return calcularFaturamento() - calcularCustoEfetivoTotal();
+        return calcularFaturamentoEfetivo() - calcularCustoEfetivoTotal();
     }
 
     public Double calcularLucroLiquido() {
@@ -173,7 +205,6 @@ public class Venda {
     public Double calcularROI() {
         Double custoEfetivo = calcularCustoEfetivoTotal();
         Double lucroLiquido = calcularLucroLiquido();
-        // Evita divisão por zero
         return (custoEfetivo > 0) ? (lucroLiquido / custoEfetivo) * 100 : 0.0;
     }
 
@@ -181,16 +212,8 @@ public class Venda {
         return itens != null && !itens.isEmpty();
     }
 
-    // ✅ ATUALIZADO: Usa o campo direto 'produto' do ItemVenda (v46.8.2)
-    // Mais seguro do que depender de getLote() caso o lote tenha sido removido
     public List<Produto> getProdutosDistintos() {
-        if (itens == null || itens.isEmpty()) {
-            return new ArrayList<>();
-        }
-        return itens.stream()
-                .map(ItemVenda::getProduto) // Uso direto do relacionamento ItemVenda -> Produto
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
+        if (itens == null || itens.isEmpty()) return new ArrayList<>();
+        return itens.stream().map(ItemVenda::getProduto).filter(Objects::nonNull).distinct().collect(Collectors.toList());
     }
 }

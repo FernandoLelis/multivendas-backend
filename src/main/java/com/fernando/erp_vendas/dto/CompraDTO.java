@@ -20,38 +20,38 @@ public class CompraDTO {
     private List<ItemCompraDTO> itens;
     private Boolean sistemaAntigo = false;
 
-    // Classe interna para os itens
     public static class ItemCompraDTO {
         private Long produtoId;
         private String produtoNome;
+        private String produtoSku;       // ✅ ADICIONADO
         private Integer quantidade;
         private BigDecimal custoUnitario;
         private BigDecimal total;
-
-        // ✅ NOVO: Campo da imagem
         private String imagemUrl;
 
         public ItemCompraDTO() {}
 
-        // Construtor a partir de ItemCompra
         public ItemCompraDTO(ItemCompra item) {
             this.produtoId = item.getProduto().getId();
             this.produtoNome = item.getProduto().getNome();
+            this.produtoSku = item.getProduto().getSku();   // ✅ ADICIONADO
             this.quantidade = item.getQuantidade();
             this.custoUnitario = item.getCustoUnitario();
             this.total = item.getCustoTotal();
-
-            // ✅ O SEGREDO: Puxando a imagem do Produto associado
             if (item.getProduto() != null) {
                 this.imagemUrl = item.getProduto().getImagemUrl();
             }
         }
 
+        // Getters e Setters
         public Long getProdutoId() { return produtoId; }
         public void setProdutoId(Long produtoId) { this.produtoId = produtoId; }
 
         public String getProdutoNome() { return produtoNome; }
         public void setProdutoNome(String produtoNome) { this.produtoNome = produtoNome; }
+
+        public String getProdutoSku() { return produtoSku; }
+        public void setProdutoSku(String produtoSku) { this.produtoSku = produtoSku; }
 
         public Integer getQuantidade() { return quantidade; }
         public void setQuantidade(Integer quantidade) { this.quantidade = quantidade; }
@@ -62,7 +62,6 @@ public class CompraDTO {
         public BigDecimal getTotal() { return total; }
         public void setTotal(BigDecimal total) { this.total = total; }
 
-        // ✅ NOVO: Getter e Setter da imagem
         public String getImagemUrl() { return imagemUrl; }
         public void setImagemUrl(String imagemUrl) { this.imagemUrl = imagemUrl; }
     }
@@ -84,6 +83,7 @@ public class CompraDTO {
         }
     }
 
+    // Getters e Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
