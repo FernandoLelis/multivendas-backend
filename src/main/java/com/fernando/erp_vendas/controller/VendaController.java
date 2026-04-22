@@ -293,7 +293,7 @@ public class VendaController {
 
             if (!quantidadeMudou) {
                 System.out.println("✅ [DEBUG] Quantidades NÃO alteradas! Mantendo lotes originais.");
-                // Atualizar apenas campos básicos e preços unitários
+                // Atualizar campos básicos e financeiros
                 boolean camposModificados = false;
 
                 if (vendaData.containsKey("idPedido")) {
@@ -324,6 +324,27 @@ public class VendaController {
                     camposModificados = true;
                 }
 
+                // ✅ CORREÇÃO: Atualizar campos financeiros também
+                if (vendaData.containsKey("fretePagoPeloCliente")) {
+                    vendaExistente.setFretePagoPeloCliente(getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0));
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("custoEnvio")) {
+                    vendaExistente.setCustoEnvio(getDoubleValue(vendaData.get("custoEnvio"), 0.0));
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("tarifaPlataforma")) {
+                    vendaExistente.setTarifaPlataforma(getDoubleValue(vendaData.get("tarifaPlataforma"), 0.0));
+                    camposModificados = true;
+                }
+
+                if (vendaData.containsKey("despesasOperacionais")) {
+                    vendaExistente.setDespesasOperacionais(getDoubleValue(vendaData.get("despesasOperacionais"), 0.0));
+                    camposModificados = true;
+                }
+
                 // Atualizar preços unitários se fornecidos
                 for (Map<String, Object> itemData : itensData) {
                     if (itemData.containsKey("precoUnitarioVenda") && itemData.get("precoUnitarioVenda") != null) {
@@ -344,6 +365,7 @@ public class VendaController {
                 }
 
                 if (!camposModificados) {
+                    System.out.println("⚠️ [DEBUG] Nenhum campo modificado");
                     return ResponseEntity.ok(new VendaDTO(vendaExistente));
                 }
 
