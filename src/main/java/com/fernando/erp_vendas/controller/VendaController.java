@@ -278,16 +278,27 @@ public class VendaController {
                 quantidadesNovas.merge(produtoId, quantidade, Integer::sum);
             }
 
-            // Comparar quantidades
-            for (Long produtoId : quantidadesNovas.keySet()) {
-                Integer quantidadeOriginal = quantidadesOriginais.getOrDefault(produtoId, 0);
-                Integer quantidadeNova = quantidadesNovas.get(produtoId);
+            // ✅ CORREÇÃO: Detectar se a lista de produtos mudou (adição/remoção)
+            Set<Long> idsProdutosNovos = quantidadesNovas.keySet();
+            Set<Long> idsProdutosAtuais = quantidadesOriginais.keySet();
+            boolean produtosMudaram = !idsProdutosNovos.equals(idsProdutosAtuais);
 
-                if (!quantidadeOriginal.equals(quantidadeNova)) {
-                    quantidadeMudou = true;
-                    System.out.println("⚠️ [DEBUG] Quantidade alterada! Produto " + produtoId +
-                            ": " + quantidadeOriginal + " → " + quantidadeNova);
-                    break;
+            if (produtosMudaram) {
+                quantidadeMudou = true;
+                System.out.println("⚠️ [DEBUG] Lista de produtos alterada! Produtos removidos ou adicionados.");
+            }
+
+            // Comparar quantidades dos produtos que existem em ambos
+            if (!quantidadeMudou) {
+                for (Long produtoId : quantidadesNovas.keySet()) {
+                    Integer quantidadeOriginal = quantidadesOriginais.getOrDefault(produtoId, 0);
+                    Integer quantidadeNova = quantidadesNovas.get(produtoId);
+                    if (!quantidadeOriginal.equals(quantidadeNova)) {
+                        quantidadeMudou = true;
+                        System.out.println("⚠️ [DEBUG] Quantidade alterada! Produto " + produtoId +
+                                ": " + quantidadeOriginal + " → " + quantidadeNova);
+                        break;
+                    }
                 }
             }
 
@@ -324,7 +335,6 @@ public class VendaController {
                     camposModificados = true;
                 }
 
-                // ✅ CORREÇÃO: Atualizar campos financeiros também
                 if (vendaData.containsKey("fretePagoPeloCliente")) {
                     vendaExistente.setFretePagoPeloCliente(getDoubleValue(vendaData.get("fretePagoPeloCliente"), 0.0));
                     camposModificados = true;
@@ -373,8 +383,8 @@ public class VendaController {
                 return ResponseEntity.ok(new VendaDTO(vendaSalva));
             }
 
-            // Quantidade mudou - reprocessar PEPS completo
-            System.out.println("⚠️ [DEBUG] Quantidades alteradas - reprocessando PEPS...");
+            // ✅ Quantidade mudou OU lista de produtos mudou - reprocessar PEPS completo
+            System.out.println("⚠️ [DEBUG] Quantidades ou lista de produtos alteradas - reprocessando PEPS...");
 
             // Verificar duplicidade de ID do pedido
             if (vendaData.containsKey("idPedido")) {
